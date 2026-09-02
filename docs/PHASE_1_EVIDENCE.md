@@ -22,6 +22,9 @@ Last updated: 2026-09-02
 - Uvicorn completed application startup on `127.0.0.1:8001`.
 - Direct synthetic checks produced valid HTML for the calls and playground pages and a valid Vobiz WebSocket response from the answer handler.
 - `.env` and `.venv` remain ignored by Git.
+- Seven offline pytest checks cover Vobiz answer XML, session persistence and matching, dropped and partial disconnects, recorder WAV/metadata output, and synthetic-fixture safety.
+- The complete test suite passed locally in 2.00 seconds without calling an external provider.
+- A least-privilege GitHub Actions workflow runs the same suite on pushes and pull requests to `main` without secrets.
 
 ## Environment limitation observed
 
@@ -30,7 +33,6 @@ The workspace sandbox does not provide reachable loopback networking between too
 ## Remaining Phase 1 work
 
 - Enter the rotated development keys into this repository's local, ignored `.env`; it currently contains empty placeholders.
-- Add synthetic fixtures needed by the automated test suite.
 - Add purpose-built secret scanning locally or in the private remote repository.
 - Create the private organization repository and protect `main`.
 - Have the second founder clone, configure, run, and review the baseline.

@@ -46,6 +46,19 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 The local dashboard is at `http://localhost:8001/calls` and the development playground is at `http://localhost:8001/playground`. These routes are currently unauthenticated and must not be exposed publicly.
 
+## Tests
+
+Install the development dependency and run the offline suite:
+
+```bash
+python -m pip install --requirement requirements-dev.txt
+python -m pytest
+```
+
+The tests use synthetic fixtures and temporary directories. They do not call Vobiz, Sarvam, Gemini, or Groq and do not require `.env` or GitHub secrets.
+
+GitHub Actions runs the same command automatically on every push and every pull request targeting `main`. The workflow can also be started manually from the repository's **Actions** tab.
+
 ## Runtime data
 
 The prototype creates `sessions/`, `recordings/`, `pdfs/`, and `prompt_override.json` locally. They are ignored by Git because they can contain sensitive information. The MVP roadmap replaces them with managed PostgreSQL and private object storage.

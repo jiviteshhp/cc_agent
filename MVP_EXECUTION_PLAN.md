@@ -360,7 +360,7 @@ Complete in this order:
 - [x] Rotate every credential exposed through `.env` or shared archives.
 - [x] Add safe ignore rules and placeholder configuration.
 - [x] Remove generated/private artifacts from the clean copy.
-- [ ] Add synthetic patient, session, transcript, and audio fixtures where tests need them.
+- [x] Add synthetic patient, session, transcript, and generated audio fixtures where tests need them.
 - [x] Verify local installation and application startup from the clean copy.
 - [x] Run initial secret and patient-artifact scans.
 - [ ] Create the private organization repository and branch protection.
