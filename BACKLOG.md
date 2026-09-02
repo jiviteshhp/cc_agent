@@ -8,3 +8,5 @@ Ideas that are outside the active phase go here. An item enters active work only
 - ABDM integration after the single-site workflow is proven and approved
 - Additional languages or departments after the pilot decision
 - Self-hosted model evaluation if data-processing requirements demand it
+- Fail startup clearly when required provider credentials are missing instead of reporting the LLM as ready
+- Replace or repair the deprecated FastAPI/Starlette `TestClient` path before building the automated HTTP suite

@@ -355,14 +355,14 @@ Suggested first split:
 
 Complete in this order:
 
-- [ ] Identify the one canonical code version and record what is intentionally retained.
-- [ ] Create a non-destructive clean working copy.
-- [ ] Rotate every credential exposed through `.env` or shared archives.
-- [ ] Add safe ignore rules and placeholder configuration.
-- [ ] Remove generated/private artifacts from the clean copy.
+- [x] Identify the one canonical code version and record what is intentionally retained.
+- [x] Create a non-destructive clean working copy.
+- [x] Rotate every credential exposed through `.env` or shared archives.
+- [x] Add safe ignore rules and placeholder configuration.
+- [x] Remove generated/private artifacts from the clean copy.
 - [ ] Add synthetic patient, session, transcript, and audio fixtures where tests need them.
-- [ ] Verify local startup from the clean copy.
-- [ ] Run secret and patient-artifact scans.
+- [x] Verify local installation and application startup from the clean copy.
+- [x] Run initial secret and patient-artifact scans.
 - [ ] Create the private organization repository and branch protection.
 - [ ] Have the second founder clone, configure, run, and review it.
 - [ ] Save evidence and declare the Phase 1 gate passed.
