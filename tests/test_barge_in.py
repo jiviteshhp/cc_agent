@@ -1,0 +1,196 @@
+import asyncio
+import json
+import base64
+from unittest.mock import AsyncMock
+
+import pytest
+
+import agent as agent_module
+import tts
+from agent import ConversationAgent
+
+
+class Socket:
+    def __init__(self):
+        self.events = []
+
+    async def send_text(self, text):
+        self.events.append(json.loads(text))
+
+    async def close(self, code=1000):
+        self.events.append({"event": "closed", "code": code})
+
+
+@pytest.mark.parametrize("stage", ["llm", "tts", "greeting"])
+def test_interrupt_cancels_stalled_provider_and_clears_audio(monkeypatch, stage):
+    async def run():
+        started = asyncio.Event()
+        closed = asyncio.Event()
+
+        async def stuck(*args, **kwargs):
+            try:
+                started.set()
+                await asyncio.Event().wait()
+                yield b"unused"
+            finally:
+                closed.set()
+
+        async def reply(*args, **kwargs):
+            yield "Synthetic question?"
+
+        monkeypatch.setattr(agent_module.llm, "stream_reply", stuck if stage == "llm" else reply)
+        monkeypatch.setattr(tts, "synth_stream", stuck)
+        socket = Socket()
+        agent = ConversationAgent(socket, {"session_id": "SYNTH-INTERRUPT"})
+        agent.stream_id = "synthetic-stream"
+        task = asyncio.create_task(agent._say_fixed("hello") if stage == "greeting" else agent._respond())
+        await asyncio.wait_for(started.wait(), 1)
+        before = len(socket.events)
+        agent._on_speech_start()
+        await asyncio.wait_for(task, 0.5)
+        assert closed.is_set()
+        assert any(event["event"] == "clearAudio" for event in socket.events[before:])
+        assert not any(event["event"] == "playAudio" for event in socket.events[before:])
+        assert agent._generation_task is None
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_tts_fallback_does_not_repeat_partial_audio(monkeypatch, partial):
+    calls = []
+
+    async def stream(text):
+        if partial:
+            yield b"first audio"
+        raise RuntimeError("synthetic provider failure")
+
+    async def fallback(text):
+        calls.append(text)
+        return b"whole sentence"
+
+    monkeypatch.setattr(tts, "_synth_stream_ws", stream)
+    monkeypatch.setattr(tts, "synth", fallback)
+
+    async def run():
+        if partial:
+            with pytest.raises(RuntimeError):
+                async for _ in tts.synth_stream("test"):
+                    pass
+        else:
+            assert [chunk async for chunk in tts.synth_stream("test")] == [b"whole sentence"]
+
+    asyncio.run(run())
+    assert calls == ([] if partial else ["test"])
+
+
+def test_partial_interrupts_once_without_becoming_patient_turn(monkeypatch):
+    async def run():
+        socket = Socket()
+        agent = ConversationAgent(socket, {"session_id": "SYNTH-PARTIAL"})
+        agent.stream_id = "synthetic"
+        agent.state = "speaking"
+        agent._on_partial("a tentative word")
+        agent._on_partial("a tentative word updated")
+        await agent._clear_task
+        assert len(socket.events) == 1
+        assert socket.events[0]["event"] == "clearAudio"
+        assert agent.history == [] and agent._pending == []
+
+    asyncio.run(run())
+
+
+def test_resumed_speech_holds_fragment_and_finals_merge(monkeypatch):
+    async def run():
+        monkeypatch.setattr(agent_module, "_DEBOUNCE", 0.01)
+        agent = ConversationAgent(Socket(), {"session_id": "SYNTH-TURNS"})
+        agent._consume_user = AsyncMock()
+        agent._on_stream_transcript("first fragment")
+        await asyncio.sleep(0)
+        agent._on_speech_start()
+        await asyncio.sleep(0.04)
+        agent._consume_user.assert_not_called()
+        agent._on_partial("tentative continuation")
+        agent._on_speech_end()
+        agent._on_stream_transcript("final continuation")
+        await asyncio.sleep(0.04)
+        agent._consume_user.assert_awaited_once_with("first fragment final continuation")
+        await agent._close_stream()
+
+    asyncio.run(run())
+
+
+def test_partial_without_vad_does_not_delay_final_for_stale_timeout(monkeypatch):
+    async def run():
+        monkeypatch.setattr(agent_module, "_DEBOUNCE", 0.01)
+        agent = ConversationAgent(Socket(), {"session_id": "SYNTH-NO-VAD"})
+        agent._consume_user = AsyncMock()
+        agent._on_partial("tentative")
+        agent._on_stream_transcript("final answer")
+        await asyncio.sleep(0.04)
+        agent._consume_user.assert_awaited_once_with("final answer")
+        await agent._close_stream()
+
+    asyncio.run(run())
+
+
+def test_short_playback_chunks_include_stream_id_and_stop_on_interrupt():
+    async def run():
+        socket = Socket()
+        agent = ConversationAgent(socket, {"session_id": "SYNTH-PLAY"})
+        agent.stream_id = "synthetic-stream"
+        agent.state = "speaking"
+        pcm = b"\x01\x00" * 8000
+        task = asyncio.create_task(agent._play(pcm, tail=False))
+        await asyncio.sleep(0.01)
+        agent._on_partial("interrupt")
+        await asyncio.wait_for(task, 0.2)
+        await agent._clear_task
+        audio = [e for e in socket.events if e["event"] == "playAudio"]
+        assert len(audio) == 1
+        assert audio[0]["streamId"] == "synthetic-stream"
+        assert len(base64.b64decode(audio[0]["media"]["payload"])) == 640
+        assert socket.events[-1]["event"] == "clearAudio"
+
+    asyncio.run(run())
+
+
+def test_disconnect_cancels_pending_turn_and_stalled_start(monkeypatch):
+    async def run():
+        agent = ConversationAgent(Socket(), {"session_id": "SYNTH-CLOSE"})
+        started, cleaned = asyncio.Event(), asyncio.Event()
+
+        async def stuck():
+            try:
+                started.set()
+                await asyncio.Event().wait()
+            finally:
+                cleaned.set()
+
+        agent.start = stuck
+        agent._consume_user = AsyncMock()
+        agent.start_background()
+        agent.start_background()  # duplicate transport start cannot greet twice
+        agent._on_stream_transcript("pending synthetic answer")
+        await started.wait()
+        assert len(agent._tasks) == 2
+        agent._closed = True
+        await agent._close_stream()
+        assert cleaned.is_set() and not agent._tasks
+        agent._consume_user.assert_not_called()
+
+    asyncio.run(run())
+
+
+def test_failed_stt_start_never_greets(monkeypatch):
+    async def run():
+        agent = ConversationAgent(Socket(), {"session_id": "SYNTH-FAIL"})
+        agent._persist = False
+        agent._open_stream = AsyncMock(side_effect=RuntimeError("synthetic failure"))
+        agent._say_fixed = AsyncMock()
+        agent.start_background()
+        await agent._start_task
+        agent._say_fixed.assert_not_called()
+        assert agent.ws.events[-1] == {"event": "closed", "code": 1011}
+
+    asyncio.run(run())

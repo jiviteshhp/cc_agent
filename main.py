@@ -1,18 +1,19 @@
-# FastAPI app: /answer webhook (Stream XML) + /stream WebSocket.
-# Run from the project root:  uvicorn main:app --host 0.0.0.0 --port 8001
+# Local website (app, port 8001) and tunnel-facing phone endpoints (phone_app,
+# port 8002). Bind both to 127.0.0.1; tunnel ONLY port 8002. See README.md.
 
-import asyncio
 import base64
 import json
 import os
 import re
+import hmac
 from contextlib import asynccontextmanager
 from datetime import datetime
-from urllib.parse import quote
+from html import escape
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, Response
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 load_dotenv()
 
@@ -21,6 +22,7 @@ import session_manager
 import llm
 import playground
 import recorder
+import call_access
 from agent import ConversationAgent
 
 
@@ -29,54 +31,82 @@ async def lifespan(app):
     os.makedirs("sessions", exist_ok=True)
     os.makedirs("pdfs", exist_ok=True)
     os.makedirs("recordings", exist_ok=True)
-    try:
-        # Nothing to pre-synthesize anymore: Gemini generates every line live, so
-        # there are no fixed clips to cache. Just warm the LLM connection so the
-        # first real turn isn't a cold start.
-        await llm.warm()
-        print("[warm] llm ready")
-    except Exception as e:
-        print(f"[warm] error: {e}")
+    if playground.configuration()["text_ready"]:
+        try:
+            await llm.warm()
+            print("[warm] llm ready")
+        except Exception as exc:
+            print(f"[warm] unavailable: {type(exc).__name__}")
+    else:
+        print("[warm] skipped: add GEMINI_API_KEY to .env for live conversations")
     print("server ready")
     yield
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]"])
 app.include_router(playground.router)   # /playground tester (isolated from calls)
+# This app has no website, recordings, prompt editor or API docs to expose.
+phone_app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
-@app.post("/answer")
+@app.middleware("http")
+async def local_browser_writes(request: Request, call_next):
+    # Localhost still needs CSRF protection: an unrelated website must not be
+    # able to edit prompts on a local server. No account/password is involved.
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        expected = f"{request.url.scheme}://{request.headers.get('host', '')}"
+        if request.headers.get("origin") != expected:
+            return Response("Untrusted origin", status_code=403)
+    return await call_next(request)
+
+
+@app.get("/healthz")
+async def healthz():
+    # Liveness only; provider availability is measured by synthetic calls.
+    return {"status": "ok"}
+
+
+@phone_app.post("/answer")
 async def answer(request: Request):
+    # The tunnel is public even though the app runs locally. Keep the callback
+    # secret to prevent outsiders opening billable voice sessions.
+    secret = os.getenv("VOBIZ_WEBHOOK_SECRET", "")
+    if len(secret) < 32:
+        return Response("Call transport is not configured", status_code=503)
+    supplied = request.query_params.get("key", "")
+    if not hmac.compare_digest(secret.encode(), supplied.encode()):
+        return Response(status_code=403)
     form = await request.form()
     caller = form.get("From", "")
-    host = os.environ["SERVER_HOST"]
-    caller_q = quote(caller, safe="")
-    # Vobiz-side noise cancellation. Level 85 is aggressive and eats into the
-    # high-frequency fricative band Sarvam needs to tell खुजली (kh-) from सूजन
-    # (s-). Exposed so a clinician can A/B it without a code change:
-    #   NOISE_CANCELLATION=false        -> off (cleanest test in a quiet room)
-    #   NOISE_CANCELLATION_LEVEL=30     -> lowest that still cuts real ward noise
-    nc = os.getenv("NOISE_CANCELLATION", "true")
-    nc_level = os.getenv("NOISE_CANCELLATION_LEVEL", "40")
+    host = os.getenv("SERVER_HOST", "").strip()
+    if not host or host.startswith(("localhost", "127.0.0.1")) or "/" in host:
+        return Response("Set SERVER_HOST to the public tunnel hostname", status_code=503)
+    ticket = call_access.issue_ticket(str(caller))
+    # Only documented Vobiz attributes. The former noiseCancellation/Level
+    # flags are not in its Stream reference; don't promise unverified DSP.
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         "<Response>\n"
         "    <Stream\n"
         '        bidirectional="true"\n'
         '        keepCallAlive="true"\n'
-        f'        noiseCancellation="{nc}"\n'
-        f'        noiseCancellationLevel="{nc_level}">\n'
-        f"        wss://{host}/stream?phone={caller_q}\n"
+        '        audioTrack="inbound"\n'
+        '        contentType="audio/x-l16;rate=8000">\n'
+        f"        wss://{escape(host)}/stream?ticket={ticket}\n"
         "    </Stream>\n"
         "</Response>"
     )
     return Response(content=xml, media_type="application/xml")
 
 
-@app.websocket("/stream")
+@phone_app.websocket("/stream")
 async def stream(websocket: WebSocket):
+    raw_phone = call_access.redeem_ticket(websocket.query_params.get("ticket", ""))
+    if raw_phone is None:
+        await websocket.close(code=4403)
+        return
     await websocket.accept()
-    raw_phone = websocket.query_params.get("phone", "")
     phone_digits = re.sub(r"\D", "", raw_phone)[-10:]
 
     session_data = (session_manager.find_session_by_phone(phone_digits)
@@ -95,7 +125,8 @@ async def stream(websocket: WebSocket):
             if msg.get("type") == "websocket.disconnect":
                 break
             if msg.get("bytes") is not None:
-                await agent.on_audio(msg["bytes"])
+                if agent.stream_id and not agent._closed:
+                    await agent.on_audio(msg["bytes"])
             elif msg.get("text") is not None:
                 await _on_text(agent, msg["text"])
     except Exception as e:
@@ -112,24 +143,44 @@ async def _on_text(agent, text):
         return
     event = data.get("event")
     if event == "start":
+        if agent.stream_id:
+            return                    # format/stream identity cannot change mid-call
         s = data.get("start", {})
-        agent.stream_id = s.get("streamId") or s.get("streamSid") or s.get("callId")
+        fmt = s.get("mediaFormat") or {}
+        # This pipeline expects raw mono 8 kHz PCM throughout. Reject a
+        # negotiated mismatch instead of feeding incorrectly labelled ASR audio.
+        if (not s.get("streamId")
+                or fmt.get("encoding") != "audio/x-l16"
+                or str(fmt.get("sampleRate")) != "8000"
+                or str(fmt.get("channels", 1)) != "1"
+                or s.get("tracks", ["inbound"]) != ["inbound"]):
+            print(f"[{agent.session_id}] unsupported inbound audio format/track")
+            agent._closed = True
+            await agent.ws.close(code=1003)
+            return
+        agent.stream_id = s["streamId"]
         print(f"[{agent.session_id}] start event, stream_id={agent.stream_id}")
         # Task so the receive loop keeps draining frames during playback.
-        asyncio.create_task(agent.start())
+        agent.start_background()
     elif event in ("media", "audio"):
         media = data.get("media") or data.get("audio") or {}
+        if not agent.stream_id or media.get("track", "inbound") != "inbound":
+            return
         payload = media.get("payload", "")
         if payload:
-            await agent.on_audio(base64.b64decode(payload))
+            raw = base64.b64decode(payload, validate=True)
+            if len(raw) % 2:
+                raise ValueError("Incomplete 16-bit PCM sample")
+            await agent.on_audio(raw)
     elif event == "stop":
         print(f"[{agent.session_id}] stop event received")
-    elif event in ("clearedAudio", "mark", "dtmf"):
+    elif event in ("clearedAudio", "playedStream", "mark", "dtmf"):
         pass   # Vobiz acks / signals we don't act on; not errors
     else:
         print(f"[{agent.session_id}] unknown event '{event}': {str(data)[:200]}")
 
 
+@app.get("/", response_class=HTMLResponse)
 @app.get("/calls", response_class=HTMLResponse)
 async def calls_page():
     sessions = []
@@ -154,7 +205,7 @@ async def calls_page():
         if not v or v == "-":
             return "<td style='color:#bbb'>—</td>"
         c = "#c0392b" if v == "unclear" else "inherit"
-        return f"<td style='color:{c}'>{v}</td>"
+        return f"<td style='color:{c}'>{escape(str(v))}</td>"
 
     rows = ""
     for s in sessions:
@@ -162,10 +213,10 @@ async def calls_page():
         sc = colors.get(st, "#666")
         phone = re.sub(r"\D", "", s.get("phone") or "")[-10:] or "—"
         ts = (s.get("call_start") or s.get("created_at") or "")[:16].replace("T", " ")
-        sid = s.get("session_id", "")
-        rows += (f"<tr><td><a href='/calls/{sid}'><b>{phone}</b></a></td><td>{s.get('name','')}</td>"
-                 f"<td><span style='color:{sc};font-weight:600'>{st}</span></td>"
-                 f"<td style='color:#888;font-size:11px'>{ts}</td>")
+        sid = escape(str(s.get("session_id", "")), quote=True)
+        rows += (f"<tr><td><a href='/calls/{sid}'><b>{phone}</b></a></td><td>{escape(str(s.get('name','')))}</td>"
+                 f"<td><span style='color:{sc};font-weight:600'>{escape(str(st))}</span></td>"
+                 f"<td style='color:#888;font-size:11px'>{escape(ts)}</td>")
         for _, k in fields:
             rows += cell(s.get(k))
         rows += f"<td style='color:#888;font-size:11px'>{sid}</td></tr>\n"
@@ -183,6 +234,7 @@ tr:hover td{{background:#fafffe}}
 a{{color:#1a6db5;text-decoration:none}} a:hover{{text-decoration:underline}}
 .agg{{color:#666;font-size:12px;margin-bottom:14px}}
 </style></head><body>
+<p style="margin-bottom:16px"><a href="/playground">Voice / text playground</a> · Local testing only</p>
 <h2>CC Agent &mdash; {len(sessions)} call{"s" if len(sessions)!=1 else ""} (auto-refresh 10s)</h2>
 <div class="agg">{agg}</div>
 <table><tr><th>Phone</th><th>Name</th><th>Status</th><th>Time</th>{head}<th>Session ID</th></tr>
@@ -248,15 +300,16 @@ async def call_detail(session_id: str):
 
 
 def _render_call_detail(sid, rec, sess):
+    sid = escape(str(sid), quote=True)
     base = rec or sess or {}
-    name = base.get("name") or "—"
+    name = escape(str(base.get("name") or "—"))
     phone = re.sub(r"\D", "", base.get("phone") or "")[-10:] or "—"
-    status = base.get("status") or "—"
+    status = escape(str(base.get("status") or "—"))
 
     if rec and rec.get("audio"):
         audio_html = (f"<audio id='player' controls preload='metadata' "
-                      f"src='/recordings/{rec['audio']}' style='width:100%'></audio>"
-                      f"<div class='hint'>Left = patient · Right = agent · click a turn to jump</div>")
+                      f"src='/recordings/{escape(str(rec['audio']), quote=True)}' style='width:100%'></audio>"
+                      f"<div class='hint'>Full conversation · new recordings mix both voices into mono · click a turn to jump</div>")
     else:
         audio_html = "<div class='hint'>No audio recorded for this call.</div>"
 
@@ -270,7 +323,7 @@ def _render_call_detail(sid, rec, sess):
              ("Avg LLM 1st token", f"{summ.get('avg_llm_ttft_ms', '—')} ms"),
              ("Avg TTS synth", f"{summ.get('avg_tts_first_ms', '—')} ms")]
     cards_html = "".join(
-        f"<div class='card'><div class='cv'>{v}</div><div class='cl'>{l}</div></div>"
+        f"<div class='card'><div class='cv'>{escape(str(v))}</div><div class='cl'>{l}</div></div>"
         for l, v in cards)
 
     turns_html = ""
@@ -291,7 +344,7 @@ def _render_call_detail(sid, rec, sess):
                 bits.append("interrupted")
             if bits:
                 badge = f"<div class='badge'>{' · '.join(bits)}</div>"
-        text = (t.get("text") or "").replace("<", "&lt;").replace(">", "&gt;")
+        text = escape(str(t.get("text") or ""))
         turns_html += (f"<div class='turn {cls}' onclick='seek({secs})'>"
                        f"<span class='ts'>{ts}</span> {text}{badge}</div>")
     if not turns_html:
@@ -303,7 +356,7 @@ def _render_call_detail(sid, rec, sess):
         v = slip.get(k)
         show = v if (v and v != "-") else "—"
         cls = "cc" if k == "chief_complaint" else ""
-        slip_rows += f"<tr><td class='k'>{label}</td><td class='{cls}'>{show}</td></tr>"
+        slip_rows += f"<tr><td class='k'>{label}</td><td class='{cls}'>{escape(str(show))}</td></tr>"
 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -356,6 +409,8 @@ function seek(t){{var p=document.getElementById('player');if(p){{p.currentTime=t
 
 async def _finalize(agent):
     # On any close that wasn't a clean finish, still produce a usable slip.
+    agent._closed = True
+    agent._interrupt = True
     await agent._close_stream()   # idempotent; finish() already closed it on clean ends
     s = agent.session
     if s.get("status") != "complete":

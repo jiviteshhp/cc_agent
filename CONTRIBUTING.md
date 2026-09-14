@@ -2,7 +2,13 @@
 
 ## Focus rule
 
-Work only on the active phase in `MVP_EXECUTION_PLAN.md`. Put unrelated ideas in `BACKLOG.md`.
+Read `LESSONS.md` first. The user's latest direction takes precedence over the
+historical phases in `MVP_EXECUTION_PLAN.md`; record explicit skips and decisions
+in `LESSONS.md`. Current focus: the local ophthalmology web voice demo, with one LLM,
+current Sarvam speech, low latency and reliable interruption. Deployment is deferred. Prepare a local PR description, but do not
+push or create a remote PR until the user requests it. Put unrelated ideas in `BACKLOG.md`.
+Founder login/call controls are out of scope. Explain other cleanup candidates
+and obtain the user's permission before removing them; avoid speculative refactors.
 
 ## Branch workflow
 

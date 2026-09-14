@@ -1,5 +1,5 @@
-# Per-call recorder: captures the whole call as a timeline-aligned stereo WAV
-# (patient = left channel, agent = right) plus a JSON of the transcript and
+# Per-call recorder: captures the whole call as a timeline-aligned mono WAV
+# (patient and agent mixed together) plus a JSON of the transcript and
 # per-turn latency. Attached to a ConversationAgent as an optional seam
 # (agent.recorder); the phone path sets one, the playground leaves it None.
 #
@@ -29,6 +29,7 @@ class CallRecorder:
         self.session_id = session_id
         self.t0 = time.monotonic()
         self._chunks = []        # (channel, start_sample, int16 ndarray); 0=patient 1=agent
+        self._channel_end = [0, 0]
         self.turns = []          # transcript + per-turn metrics, in order
         self.n_barge_ins = 0
         self._open = None        # metrics accumulator for the in-progress agent turn
@@ -42,8 +43,12 @@ class CallRecorder:
         if len(pcm) % 2:                 # guard against an odd-length PCM frame
             pcm = pcm[:-1]
         if pcm:
-            self._chunks.append((channel, self._now_sample(),
-                                 np.frombuffer(pcm, dtype=np.int16)))
+            # Frames can arrive in a network burst. Never overwrite preceding
+            # samples from the same speaker just because arrivals were close.
+            start = max(self._now_sample(), self._channel_end[channel])
+            buf = np.frombuffer(pcm, dtype="<i2")
+            self._chunks.append((channel, start, buf))
+            self._channel_end[channel] = start + len(buf)
 
     def add_inbound(self, pcm):          # patient mic
         self._add(0, pcm)
@@ -93,6 +98,13 @@ class CallRecorder:
 
     def barge_in(self):
         self.n_barge_ins += 1
+        # Playback timing is a local estimate, not provider-confirmed delivery.
+        # Trim the queued outbound tail at the local clear request; keep every
+        # inbound sample, including the overlapping interruption.
+        cutoff = self._now_sample()
+        self._chunks = [(ch, start, buf if ch == 0 else buf[:max(0, cutoff - start)])
+                        for ch, start, buf in self._chunks if ch == 0 or start < cutoff]
+        self._channel_end[1] = cutoff
 
     # ---- finalize ----
     def finalize(self, session):
@@ -112,6 +124,9 @@ class CallRecorder:
             "call_start": session.get("call_start"),
             "call_end": session.get("call_end"),
             "audio": f"{sid}.wav" if have_audio else None,
+            "audio_format": {"channels": 1, "sample_rate": SAMPLE_RATE,
+                             "sample_width_bytes": 2, "mix": "patient+agent",
+                             "timing": "local-estimate"} if have_audio else None,
             "summary": self._summary(),
             "turns": self.turns,
             "slip": {k: session.get(k) for k in _SLIP_FIELDS},
@@ -127,18 +142,18 @@ class CallRecorder:
         for ch, start, buf in self._chunks:
             tgt = left if ch == 0 else right
             tgt[start:start + len(buf)] = buf
-        # Normalize each channel independently so patient (PSTN, quieter) and
-        # agent (TTS, louder) are at comparable listening levels in the review WAV.
-        left = _normalize(left)
-        right = _normalize(right)
-        stereo = np.empty(total * 2, dtype=np.int16)
-        stereo[0::2] = left
-        stereo[1::2] = right
+        # Balance the two sources, sum in float (int16 addition would overflow),
+        # then apply one peak gain to preserve overlap without hard clipping.
+        mixed = _normalize(left) + _normalize(right)
+        peak = float(np.max(np.abs(mixed))) if mixed.size else 0.0
+        if peak > 32000:
+            mixed *= 32000 / peak
+        mono = np.rint(mixed).astype("<i2")
         with wave.open(path, "wb") as w:
-            w.setnchannels(2)
+            w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(SAMPLE_RATE)
-            w.writeframes(stereo.tobytes())
+            w.writeframes(mono.tobytes())
 
     def _summary(self):
         a = [t for t in self.turns if t["role"] == "assistant"]
@@ -171,6 +186,6 @@ def _normalize(arr, target_rms=8192, max_gain=8.0):
     f = arr.astype(np.float32)
     rms = np.sqrt(np.mean(f ** 2))
     if rms < 32:          # effectively silence — leave untouched
-        return arr
+        return f
     gain = min(target_rms / rms, max_gain)
-    return np.clip(f * gain, -32768, 32767).astype(np.int16)
+    return f * gain

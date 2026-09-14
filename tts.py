@@ -1,23 +1,13 @@
-# TTS: Sarvam Bulbul (India-tuned Hindi), raw 8kHz 16-bit mono PCM ready for
-# Vobiz.
-#
-# synth_stream() is the live-call path: Sarvam's streaming WebSocket API only
-# outputs MP3 (no raw PCM option), so this pipes chunks through a live ffmpeg
-# subprocess (MP3 -> s16le PCM) as they arrive, instead of waiting for the whole
-# clip -- measured live 2026-07-23: first audio in ~0.6-0.9s vs ~1.4s+ for the
-# blocking REST call below, and that REST latency is felt on EVERY spoken turn
-# in this app (CONVERSATION_PROMPT asks for one sentence per turn, so there's
-# rarely a next sentence already queued to mask it behind, unlike a multi-
-# sentence reply). Falls back to synth() (the original REST call, proven
-# stable) on ANY failure -- network, ffmpeg missing/crash, decode error -- so a
-# streaming-path problem can't silence a live call.
-#
-# synth() (REST, blocking, whole-clip) is kept as that fallback and is still
-# used directly by nothing else in the app as of this rewrite.
+# Existing phone TTS adapter: Bulbul v3 to 8 kHz mono PCM for Vobiz.
+# Retains the previously tested streaming MP3 -> ffmpeg decoder and REST fallback.
+# Sarvam now documents raw PCM too; the browser uses browser_voice.py instead,
+# streaming 24 kHz linear16 directly without a decoder subprocess.
+# Fall back only before any audio is emitted, never replay a partial sentence.
 
 import asyncio
 import base64
 import os
+from contextlib import aclosing, suppress
 
 import httpx
 from sarvamai import AsyncSarvamAI
@@ -75,15 +65,21 @@ async def synth(text):
 
 async def synth_stream(text):
     # Yields PCM chunks as they're decoded, so playback can start on the first
-    # chunk instead of waiting for the whole clip. On any failure, falls back to
-    # the REST synth() above and yields its result as a single chunk.
+    # chunk instead of waiting for the whole clip. Before any audio is emitted,
+    # a failure can safely fall back to REST synthesis of the whole sentence.
     text = (text or "").strip()
     if not text:
         return
+    emitted = False
     try:
-        async for chunk in _synth_stream_ws(text):
-            yield chunk
+        async with aclosing(_synth_stream_ws(text)) as stream:
+            async for chunk in stream:
+                emitted = True
+                yield chunk
     except Exception as e:
+        if emitted:
+            # Replaying the whole sentence after partial playback duplicates speech.
+            raise
         print(f"[tts] synth_stream failed ({type(e).__name__}: {e}); falling back to REST synth")
         pcm = await synth(text)
         if pcm:
@@ -117,6 +113,8 @@ async def _synth_stream_ws(text):
     finally:
         if not feeder.done():
             feeder.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await feeder
         if proc.returncode is None:
             proc.kill()
         await proc.wait()

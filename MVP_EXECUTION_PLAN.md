@@ -1,6 +1,15 @@
 # CC Agent — Strong MVP Execution Plan
 
-Status: **Phase 1 is the only active phase**
+Status: **Superseded sequencing — see current direction below and LESSONS.md**
+
+2026-09-11: The user reports Phase 2 complete. Current priority is local-only
+voice reliability, current Sarvam models, and full mixed mono recordings.
+Deployment is deferred; retain the single LLM. Prepare a local PR draft, no push.
+Founder passwords and number on/off controls have been removed by user request;
+ask permission before removing other cleanup candidates. Keep the PR minimal.
+The phased checklist below is historical guidance, not a requirement to repeat
+completed work or resume deferred deployment. Explicit user skips take precedence over its
+sequencing. Record decisions and lessons in `LESSONS.md`.
 Product: Hindi/Hinglish voice-based OPD history intake with clinician review
 Team: Two founders
 Planning horizon: Approximately 7–10 engineering weeks, excluding hospital/vendor approval delays

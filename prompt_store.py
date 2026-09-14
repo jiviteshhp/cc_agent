@@ -11,7 +11,7 @@ import os
 
 import prompts
 
-_OVERRIDE = os.path.join(os.path.dirname(__file__), "prompt_override.json")
+_OVERRIDE = os.getenv("PROMPT_OVERRIDE_PATH", os.path.join(os.path.dirname(__file__), "prompt_override.json"))
 
 _current = {
     "conversation": prompts.CONVERSATION_PROMPT,

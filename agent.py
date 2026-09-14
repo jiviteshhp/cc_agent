@@ -20,8 +20,10 @@
 import asyncio
 import base64
 import json
+import os
 import time
 from datetime import datetime
+from contextlib import aclosing, suppress
 
 import session_manager
 import pdf_slip
@@ -33,7 +35,9 @@ import tts
 import prompts
 
 SPEAK_TAIL = 0.15            # grace after a clip before moving on
-_DEBOUNCE = 0.8             # quiet seconds before buffered STT fragments become one turn
+_DEBOUNCE = max(0.0, float(os.getenv("STT_TURN_DEBOUNCE_MS", "400")) / 1000)
+_SPEECH_STALE = 10.0        # safety release if a provider loses speech-end events
+_PLAY_CHUNK_BYTES = SAMPLE_RATE * 2 * 40 // 1000  # 40 ms of mono PCM
 
 _ENDERS = "।?!\n"           # sentence boundaries for streaming TTS
 _HARD_CAP = 90              # also flush if a sentence grows past this many chars
@@ -75,11 +79,20 @@ class ConversationAgent:
         self.system_prompt = prompts.CONVERSATION_PROMPT
         self._persist = True         # phone path writes session JSON + PDF
         self._voice = True           # phone path always speaks (TTS); text mode = False
+        self.input_rate = SAMPLE_RATE
+        self.output_rate = SAMPLE_RATE
+        self.turn_debounce = _DEBOUNCE
         self._stt_stream = None
         self._turn_lock = asyncio.Lock()   # serialize turns (transcripts arrive async)
         self._pending = []           # STT fragments awaiting the debounce flush
         self._pending_gen = 0        # bumps per fragment; the newest owns the flush
         self.recorder = None         # phone path sets a CallRecorder; playground leaves None
+        self._generation_task = None
+        self._clear_task = None
+        self._tasks = set()          # startup/transcript tasks belong to this call
+        self._start_task = None
+        self._user_speaking = False
+        self._speech_activity = 0.0
 
     async def _emit(self, kind, payload):
         # No-op on the phone path; the playground overrides this to push
@@ -106,7 +119,7 @@ class ConversationAgent:
         if self.recorder:
             self.recorder.add_outbound(pcm)
         payload = base64.b64encode(pcm).decode("ascii")
-        await self._send({"event": "playAudio", "media": {
+        await self._send({"event": "playAudio", "streamId": self.stream_id, "media": {
             "contentType": "audio/x-l16", "sampleRate": "8000", "payload": payload}})
 
     async def _play(self, pcm, tail=True):
@@ -117,16 +130,49 @@ class ConversationAgent:
         # in many small pieces would inject an audible gap after each one.
         if not pcm or self._interrupt:
             return
-        await self._send_audio(pcm)
-        dur = len(pcm) / (SAMPLE_RATE * 2) + (SPEAK_TAIL if tail else 0.0)
-        slept = 0.0
-        while slept < dur:
-            if self._interrupt:
+        # Queue only a short piece at a time. A whole synthesized sentence can
+        # otherwise remain audible in the remote buffer after local cancellation.
+        chunk_bytes = self.output_rate * 2 * 40 // 1000
+        for offset in range(0, len(pcm), chunk_bytes):
+            if self._interrupt or self._closed:
                 return
-            await asyncio.sleep(0.05)
-            slept += 0.05
+            chunk = pcm[offset:offset + chunk_bytes]
+            sent_at = time.monotonic()
+            await self._send_audio(chunk)
+            remaining = len(chunk) / (self.output_rate * 2) - (time.monotonic() - sent_at)
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+        if tail and not self._interrupt:
+            await asyncio.sleep(SPEAK_TAIL)
 
     # ---- lifecycle ----
+    def _background(self, coro):
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+
+        def done(task):
+            self._tasks.discard(task)
+            if not task.cancelled() and task.exception():
+                print(f"[{self.session_id}] background task failed: {type(task.exception()).__name__}")
+
+        task.add_done_callback(done)
+        return task
+
+    def start_background(self):
+        if self._start_task is None and not self._closed:
+            self._start_task = self._background(self._start_safely())
+
+    async def _start_safely(self):
+        try:
+            await self.start()
+        except Exception:
+            await self._fail_stt("Voice startup failed; check provider credentials, model access and settings.")
+
+    async def _fail_stt(self, message):
+        await self._emit("bot", f"[error: {message}]")
+        self._interrupt_playback()
+        await self.ws.close(code=1011)
+
     async def start(self):
         self.session["status"] = "in_call"
         self.session["call_start"] = datetime.now().isoformat(timespec="seconds")
@@ -134,10 +180,13 @@ class ConversationAgent:
             session_manager.save_session(self.session)
         if self._voice:
             await self._open_stream()
+        if self._closed:
+            return
         self.history.append({"role": "assistant", "content": prompts.GREETING})
         await self._emit("bot", prompts.GREETING)
         if self._voice:
-            await self._say_fixed(prompts.GREETING)
+            async with self._turn_lock:
+                await self._say_fixed(prompts.GREETING)
         if self.recorder:
             self.recorder.agent_turn(prompts.GREETING)   # log greeting (no latency metrics)
 
@@ -147,15 +196,33 @@ class ConversationAgent:
         self.state = "speaking"
         self._interrupt = False
         await self._clear_audio()
+        if self._interrupt:
+            if self._clear_task:
+                await self._clear_task
+            self._after_speaking()
+            return
+        self._generation_task = asyncio.create_task(self._speak_fixed(text))
+        try:
+            await self._generation_task
+        except asyncio.CancelledError:
+            if not self._interrupt:
+                raise
+        finally:
+            self._generation_task = None
+            if self._clear_task:
+                await self._clear_task
+            self._after_speaking()
+
+    async def _speak_fixed(self, text):
         spoke_any = False
-        async for pcm in tts.synth_stream(text):
-            if self._interrupt:
-                break
-            await self._play(pcm, tail=False)
-            spoke_any = True
+        async with aclosing(tts.synth_stream(text)) as stream:
+            async for pcm in stream:
+                if self._interrupt:
+                    break
+                await self._play(pcm, tail=False)
+                spoke_any = True
         if spoke_any and not self._interrupt:
             await asyncio.sleep(SPEAK_TAIL)   # one trailing grace for the whole line
-        self._after_speaking()
 
     def _after_speaking(self):
         # Sarvam keeps a continuous audio stream, so any barge-in speech is
@@ -174,27 +241,53 @@ class ConversationAgent:
     # ---- streaming STT (Sarvam WS) ----
     async def _open_stream(self):
         self._stt_stream = stt_stream.StreamingSTT(
+            sample_rate=self.input_rate,
             on_speech_start=self._on_speech_start,
             on_transcript=self._on_stream_transcript,
+            on_speech_end=self._on_speech_end,
+            on_partial=self._on_partial,
+            on_error=lambda message: self._background(self._fail_stt(message)),
         )
         await self._stt_stream.start()
 
     def _on_speech_start(self):
-        # A START_SPEECH VAD event while we're talking -> barge in. _play already
-        # honors self._interrupt.
-        if self.state == "speaking":
+        self._user_speaking = True
+        self._speech_activity = time.monotonic()
+        self._interrupt_playback()
+
+    def _on_speech_end(self):
+        self._user_speaking = False
+        self._speech_activity = time.monotonic()
+
+    def _on_partial(self, text):
+        if text.strip():
+            # Early evidence of speech is a backup for a missing VAD start.
+            # Partials NEVER enter conversation history or clinical extraction.
+            self._speech_activity = time.monotonic()
+            self._interrupt_playback()
+
+    def _interrupt_playback(self):
+        if self.state == "speaking" and not self._interrupt:
             self._interrupt = True
+            # Flush remote playback immediately, including while generation is
+            # blocked waiting for a provider. Do not wait for another chunk.
+            self._clear_task = asyncio.create_task(self._clear_audio())
+            if self._generation_task:
+                self._generation_task.cancel()
             if self.recorder:
                 self.recorder.barge_in()
 
     def _on_stream_transcript(self, text):
         # Fired from the receive loop; hand off so the loop keeps draining events.
-        asyncio.create_task(self._handle_stream_text(text))
+        if not self._closed and not self._ended:
+            self._background(self._handle_stream_text(text))
 
     async def _handle_stream_text(self, text):
         text = (text or "").strip()
         if not text:
             return
+        # A final transcript also interrupts if a speech-start event was lost.
+        self._interrupt_playback()
         # Sarvam's VAD splits one halting sentence into several final transcripts
         # seconds apart; treating each as a full turn made the agent fire a reply
         # per fragment. Buffer fragments until the patient has been quiet for
@@ -202,19 +295,44 @@ class ConversationAgent:
         self._pending.append(text)
         self._pending_gen += 1
         gen = self._pending_gen
-        await asyncio.sleep(_DEBOUNCE)
-        if gen != self._pending_gen:
-            return                    # a newer fragment arrived; it owns the flush
-        joined = " ".join(self._pending)
-        self._pending = []
-        async with self._turn_lock:   # if a barge interrupted us, the prior turn
-            await self._consume_user(joined)   # released the lock first
+        quiet_since = time.monotonic()
+        while not self._closed and not self._ended:
+            await asyncio.sleep(max(self.turn_debounce, 0.01))
+            if gen != self._pending_gen:
+                return                # a newer final owns the combined turn
+            now = time.monotonic()
+            if self._user_speaking and now - self._speech_activity < _SPEECH_STALE:
+                continue              # don't answer a fragment while speech resumes
+            if now - max(quiet_since, self._speech_activity) < self.turn_debounce:
+                continue
+            async with self._turn_lock:
+                # Recheck after waiting for interrupted generation to clean up.
+                if gen != self._pending_gen:
+                    return
+                if self._user_speaking and time.monotonic() - self._speech_activity < _SPEECH_STALE:
+                    continue
+                if time.monotonic() - max(quiet_since, self._speech_activity) < self.turn_debounce:
+                    continue
+                joined = " ".join(self._pending)
+                self._pending = []
+                await self._consume_user(joined)
+                return
 
     async def handle_text(self, text):
         # Text-mode entry (playground); same brain, no audio.
         await self._consume_user(text)
 
     async def _close_stream(self):
+        # Cancel call-owned work on disconnect; excluding the current task also
+        # allows finish() to invoke this from inside the final conversation turn.
+        current = asyncio.current_task()
+        tasks = set(self._tasks)
+        if self._generation_task:
+            tasks.add(self._generation_task)
+        tasks.discard(current)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         if self._stt_stream is not None:
             await self._stt_stream.close()
             self._stt_stream = None
@@ -241,25 +359,36 @@ class ConversationAgent:
         self.state = "speaking"
         self._interrupt = False
         await self._clear_audio()
+        if self._interrupt:
+            if self._clear_task:
+                await self._clear_task
+            return
         if not self._voice:
             return await self._respond_text()
         q = asyncio.Queue()
         full = []
         producer = asyncio.create_task(self._produce(q, full))
+        producer.add_done_callback(lambda task: q.put_nowait(None))
+        self._generation_task = producer
         first = True
-        while True:
-            pcm = await q.get()
-            if pcm is None or self._interrupt:
-                break
-            if first:
-                if self.recorder:
-                    self.recorder.mark_first_audio()
-                first = False
-            # Each item is one streamed TTS chunk, not a whole sentence -- no
-            # per-chunk tail, or a multi-chunk reply would sound like it stutters.
-            await self._play(pcm, tail=False)
-        if not producer.done():
-            producer.cancel()
+        try:
+            while True:
+                pcm = await q.get()
+                if pcm is None or self._interrupt:
+                    break
+                if first:
+                    if self.recorder:
+                        self.recorder.mark_first_audio()
+                    first = False
+                await self._play(pcm, tail=False)
+        finally:
+            if not producer.done():
+                producer.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer
+            self._generation_task = None
+            if self._clear_task:
+                await self._clear_task
         if self._interrupt:
             await self._clear_audio()
         elif not first:
@@ -284,35 +413,38 @@ class ConversationAgent:
         t_prod = time.time()
         tts_timed = False
         try:
-            async for chunk in llm.stream_reply(self.history, system=self.system_prompt):
-                if rec:
-                    rec.mark_llm_first(int((time.time() - t_prod) * 1000))
-                if self._interrupt:
-                    break
-                full.append(chunk)
-                buf += chunk
-                while True:
-                    i = _split_point(buf)
-                    if i == -1:
-                        break
-                    spoken = buf[:i + 1].replace("<END>", "").strip()
-                    buf = buf[i + 1:]
-                    if spoken:
-                        t_tts = time.time()
-                        async for pcm in tts.synth_stream(spoken):
-                            if rec and not tts_timed:
-                                rec.mark_tts_first(int((time.time() - t_tts) * 1000))
-                                tts_timed = True
-                            if self._interrupt:
-                                await q.put(None)
-                                return
-                            await q.put(pcm)
-            rem = buf.replace("<END>", "").strip()
-            if rem and not self._interrupt:
-                async for pcm in tts.synth_stream(rem):
+            async with aclosing(llm.stream_reply(self.history, system=self.system_prompt)) as stream:
+                async for chunk in stream:
+                    if rec:
+                        rec.mark_llm_first(int((time.time() - t_prod) * 1000))
                     if self._interrupt:
                         break
-                    await q.put(pcm)
+                    full.append(chunk)
+                    buf += chunk
+                    while True:
+                        i = _split_point(buf)
+                        if i == -1:
+                            break
+                        spoken = buf[:i + 1].replace("<END>", "").strip()
+                        buf = buf[i + 1:]
+                        if spoken:
+                            t_tts = time.time()
+                            async with aclosing(tts.synth_stream(spoken)) as audio_stream:
+                                async for pcm in audio_stream:
+                                    if rec and not tts_timed:
+                                        rec.mark_tts_first(int((time.time() - t_tts) * 1000))
+                                        tts_timed = True
+                                    if self._interrupt:
+                                        await q.put(None)
+                                        return
+                                    await q.put(pcm)
+            rem = buf.replace("<END>", "").strip()
+            if rem and not self._interrupt:
+                async with aclosing(tts.synth_stream(rem)) as audio_stream:
+                    async for pcm in audio_stream:
+                        if self._interrupt:
+                            break
+                        await q.put(pcm)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -323,8 +455,9 @@ class ConversationAgent:
             if not full and not self._interrupt:
                 full.append(prompts.RETRY_APOLOGY)
                 try:
-                    async for pcm in tts.synth_stream(prompts.RETRY_APOLOGY):
-                        await q.put(pcm)
+                    async with aclosing(tts.synth_stream(prompts.RETRY_APOLOGY)) as audio_stream:
+                        async for pcm in audio_stream:
+                            await q.put(pcm)
                 except Exception as tts_e:
                     print(f"[{self.session_id}] apology tts failed: {tts_e}")
         if rec:
@@ -353,7 +486,7 @@ class ConversationAgent:
 
     # ---- slip / finish ----
     async def finalize_slip(self, force=False):
-        # POST-CALL extraction: one Groq pass over the whole transcript fills the
+        # POST-CALL extraction: one pass using the same configured model fills the
         # doctor's-slip fields. Idempotent (runs once) unless forced (playground).
         if self._slip_done and not force:
             return
