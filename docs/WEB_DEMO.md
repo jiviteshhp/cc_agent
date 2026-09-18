@@ -7,11 +7,20 @@ No tunnel, phone number, hosted agent builder or deployment is needed.
 ## User flow
 
 The included ophthalmology prompt and vetted opening message are preloaded.
-Edit the prompt, optionally adjust the opening, choose a voice, and start.
+Enter a name (English spelling for the current PDF font) and age, optionally edit
+the prompt/opening and voice, then start. Each start creates a separate local call.
 Prompt/settings are snapshotted into each session; old sockets cannot change a
 new session. The editor is disabled during a conversation. Explicit saving writes
-only the conversation prompt to the existing ignored override file. Transcripts
-and summary remain in memory unless the user downloads a text summary.
+only the conversation prompt to the existing ignored override file. Transcripts remain in memory. Successful completion automatically saves a PDF
+under `pdfs/local_calls/`, named `001Name.pdf`, `002Name.pdf`, and so on. The
+persistent register is `state/browser_calls.sqlite3`; both locations are ignored
+by Git. The home page and `/playground` show the same form and saved call list.
+Download an earlier PDF from its list row after a browser/server restart.
+Name/age fields clear after saving so the next person gets a fresh conversation.
+Reset/disconnect retains an interrupted row without a PDF. Summary/save failures
+are shown explicitly. An abrupt process kill can leave an old row labelled in
+progress; use the PDF-saved status to identify finished reports. Use one server
+worker. Numbering includes failed/interrupted attempts, so PDF numbers may have gaps.
 
 The screen includes live interim/final transcript, speech status, input/output
 level visualization, mic mute, reset and an intake summary after completion.

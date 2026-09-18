@@ -7,6 +7,64 @@ uncertainty. Keep credentials and patient data out. This is a decision log, not
 a transcript of private internal reasoning. Preserve older entries and explicitly
 mark decisions superseded when direction changes.
 
+## 2026-09-18 — Share the working Android demo on a branch
+
+- User confirms the Android demo is working after manual CA installation.
+- User explicitly authorizes creating and pushing a new GitHub branch, with no
+  merge, and requests reproducible friend setup from the repo. This supersedes
+  the no-push restriction for this branch only; deployment remains deferred.
+- Branch: `feat/android-hotspot-pdf-demo`, based on the existing voice-demo
+  branch so a fresh clone includes the browser voice foundation.
+- Guide now includes clone, dependencies, API-key setup, hotspot address lookup,
+  HTTPS launch, certificate-only download, Android Settings installation and
+  repeat-call/PDF checks. Linux is tested; Windows/macOS steps are unverified.
+- Publish code/docs/tests only. Exclude credentials, certificates, runtime
+  databases/PDFs, unrelated deployment scaffolding and provider research.
+
+## 2026-09-18 — Android phone via its hotspot
+
+- User wants the demo on Android, with the laptop connected to that phone's
+  hotspot. User subsequently confirmed the laptop is connected.
+- Extends localhost-only access to an explicitly selected private LAN address
+  over HTTPS. Hosting/deployment remains deferred; never tunnel this website.
+  Speech/model APIs still require internet and may incur existing usage costs.
+- Added an opt-in OpenSSL/uvicorn launcher bound to one private IPv4 on 8443.
+  It sets an exact allowed host and retains same-origin HTTP/WebSocket checks.
+  Local CA and server keys stay under ignored `state/phone_https/`; only the
+  public CA certificate is installed manually on Android. No automatic device,
+  firewall or system-trust changes. CA reuse supports DHCP address changes.
+- Evidence: all 27 targeted HTTPS/access tests pass, including real certificate
+  chain/IP verification, CA reuse, key permissions and HTTP/WSS origin checks.
+  JavaScript syntax and diff whitespace checks pass. Handset routing, CA
+  installation and actual microphone access still require the connected Android
+  device; desktop/server tests cannot establish these.
+- Runtime follow-up: started HTTPS on the connected hotspot interface and verified
+  `/healthz` using the generated CA (no TLS bypass). A separate temporary HTTP
+  directory serves only the public CA for direct Android download; private keys
+  remain outside that directory. Android installation and microphone test await
+  user action at that point; user subsequently confirmed the demo works.
+
+## 2026-09-18 — Named localhost calls and numbered PDFs
+
+- User requests a local name/age interface, separate calls per person, a saved
+  list, and filenames such as `001Name.pdf`. Deployment remains deferred.
+- Supersedes memory-only browser summaries/text downloads for named calls.
+  The local home page now opens the browser interface; `/calls` retains the
+  existing phone history. Browser register lives in ignored
+  `state/browser_calls.sqlite3`; PDFs live in ignored `pdfs/local_calls/`.
+- SQLite allocates a unique increasing call number even for duplicate names and
+  concurrent starts. Numbers include unsuccessful attempts. Entered identity is
+  copied into the PDF without model extraction. Existing clinical fields remain
+  unchanged. Filenames strip path punctuation; PDFs publish via temporary rename.
+- Normal disconnect, extraction failure and PDF save failure retain a row without
+  a successful PDF link. Abrupt server termination can leave an in-progress row.
+  Current PDF font still expects English-spelled names. Single local worker;
+  speech/conversation processing still uses existing cloud APIs.
+- Evidence: 90 offline tests pass, including concurrent numbering, PDF downloads,
+  disconnect/failure states and route isolation. Chrome synthetic-provider checks
+  pass identity submission, numbered download, audio cleanup and mobile layout.
+  Live speech quality was not retested. No push or deployment.
+
 ## 2026-09-15 — Current direction: local ophthalmology web voice demo
 
 - Supersedes telephony research/migration as the immediate goal. User wants a

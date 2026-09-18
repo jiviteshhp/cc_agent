@@ -7,7 +7,7 @@ const fields = [
 ];
 let config, defaults, current = null, mode = "voice", summary = null;
 let assistantBubble = null, partialBubble = null, turns = [], interruptionCount = 0;
-let speechEndedAt = null;
+let speechEndedAt = null, savedCall = null;
 const labels = {
   idle: ["Ready when you are", "Start a conversation, then allow your microphone."],
   connecting: ["Getting ready…", "Connecting your microphone and assistant."],
@@ -25,7 +25,7 @@ function status(state, hint) {
 }
 function showError(message) { $("error-text").textContent = message; $("error").hidden = false; }
 function controls(active) {
-  for (const id of ["start", "voice", "pace", "edit-prompt", "voice-mode", "text-mode"]) $(id).disabled = active;
+  for (const id of ["patient-name", "patient-age", "start", "voice", "pace", "edit-prompt", "voice-mode", "text-mode"]) $(id).disabled = active;
   $("end").disabled = !active || !current?.ready || current?.ending;
   $("mute").disabled = !active || mode !== "voice" || !current?.ready || current?.ending;
   $("text-input").disabled = !active || !current?.ready || current?.ending;
@@ -54,7 +54,7 @@ function bubble(role, text = "", partial = false) {
 function scrollTranscript() { $("transcript").scrollTop = $("transcript").scrollHeight; }
 function clearPartial() { partialBubble?.wrapper.remove(); partialBubble = null; }
 function clearConversation() {
-  turns = []; summary = null; assistantBubble = null; clearPartial();
+  savedCall = null; turns = []; summary = null; assistantBubble = null; clearPartial();
   $("transcript").replaceChildren(); renderSlip();
   $("slip-status").textContent = "Prepared after the conversation, from what the patient shared.";
   $("summary-badge").textContent = "Awaiting conversation"; $("download").disabled = true;
@@ -89,7 +89,7 @@ function release(s, finalState = "idle") {
   if (s.ws?.readyState < WebSocket.CLOSING) s.ws.close();
   s.ctx?.close().catch(() => {});
   if (current === s) {
-    current = null; controls(false); status(finalState);
+    current = null; setTimeout(refreshCalls, 300); controls(false); status(finalState);
     $("mute").textContent = "Mute mic"; $("mute").setAttribute("aria-pressed", "false");
     $("live-label").textContent = finalState === "complete" ? "COMPLETE" : "TRANSCRIPT";
   }
@@ -180,7 +180,15 @@ function onMessage(s, msg) {
     case "slip_status": $("slip-status").textContent = msg.data; break;
     case "slip":
       summary = msg.data; renderSlip(summary); $("slip-status").textContent = "A draft of the information shared. Ready for your review.";
-      $("summary-badge").textContent = "Ready for review"; $("download").disabled = false; break;
+      $("summary-badge").textContent = "Ready for review"; break;
+    case "registered_call":
+      $("active-person").textContent = `Call ${String(msg.data.number).padStart(3, "0")} · ${msg.data.name} · Age ${msg.data.age}`;
+      refreshCalls(); break;
+    case "saved_call":
+      savedCall = msg.data; $("download").disabled = false;
+      $("slip-status").textContent = `Saved locally as ${savedCall.filename}. Ready for review.`;
+      $("patient-name").value = ""; $("patient-age").value = "";
+      refreshCalls(); break;
     case "error": showError(msg.data); break;
     case "done":
       s.completed = true; s.ready = false; stopMic(s); controls(true); clearPartial();
@@ -189,12 +197,15 @@ function onMessage(s, msg) {
 }
 async function start() {
   if (current) return;
+  if (!$("patient-form").reportValidity()) return;
+  const name = $("patient-name").value.trim(), age = Number($("patient-age").value);
+  if (!name) { showError("Enter the person’s name."); return; }
   const s = {sources: new Set(), nextTime: 0, fragments: [], playedTurns: new Set(), interruptedTurns: new Set(), started: Date.now(), ready: false, busy: false, disposed: false, muted: false, level: 0};
   current = s; $("error").hidden = true; clearConversation(); status("connecting"); controls(true);
   try {
     // Create/resume in the click gesture, before fetch or permission awaits.
     if (mode === "voice") {
-      if (!window.AudioContext || !navigator.mediaDevices?.getUserMedia) throw new Error("Use Chrome or Edge on localhost to enable microphone audio.");
+      if (!window.AudioContext || !navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access needs localhost or trusted HTTPS. On Android, install the local demo CA certificate and use the HTTPS address.");
       s.ctx = new AudioContext({latencyHint: "interactive"}); await s.ctx.resume();
     }
     await refreshConfig(); if (current !== s) return;
@@ -224,7 +235,7 @@ async function start() {
     s.startTimeout = setTimeout(() => failed(s, "The assistant could not connect. Check API access and your internet connection."), 15000);
     ws.onopen = () => {
       if (current !== s) { ws.close(); return; }
-      ws.send(JSON.stringify({event: "start", mode, prompt: $("prompt").value, greeting: $("greeting").value, speaker: $("voice").value, pace: Number($("pace").value)}));
+      ws.send(JSON.stringify({event: "start", name, age, mode, prompt: $("prompt").value, greeting: $("greeting").value, speaker: $("voice").value, pace: Number($("pace").value)}));
     };
     ws.onmessage = event => {
       try { onMessage(s, JSON.parse(event.data)); }
@@ -296,13 +307,33 @@ $("save-prompt").onclick = async () => {
     $("save-note").textContent = "Conversation prompt saved locally. Opening message is session-only.";
   } catch (error) { $("save-note").textContent = error.message; }
 };
+$("patient-form").onsubmit = event => { event.preventDefault(); start(); };
 $("download").onclick = () => {
-  if (!summary) return;
-  const body = ["OPHTHALMOLOGY INTAKE — LOCAL DEMO", "Draft for review", "", ...fields.map(([key,label]) => `${label}: ${summary[key] === "-" ? "Not provided" : summary[key]}`), "", "CONVERSATION", ...turns.map(turn => `${turn.role === "user" ? "Patient" : "Assistant"}: ${turn.text}${turn.interrupted ? " [interrupted]" : ""}`)].join("\n");
-  const url = URL.createObjectURL(new Blob([body], {type: "text/plain;charset=utf-8"}));
-  const link = document.createElement("a"); link.href = url; link.download = "optha-demo-intake.txt"; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (savedCall) window.location.href = `/playground/calls/${savedCall.number}/pdf`;
 };
+async function refreshCalls() {
+  try {
+    const response = await fetch("/playground/calls", {cache: "no-store"});
+    if (!response.ok) throw new Error("Could not load saved calls.");
+    const calls = await response.json();
+    $("call-list").replaceChildren();
+    const statuses = {in_call: "In progress", complete: "PDF saved", interrupted: "Interrupted · no PDF", summary_failed: "Summary failed · no PDF", pdf_failed: "PDF save failed"};
+    for (const call of calls) {
+      const row = document.createElement("tr");
+      for (const value of [String(call.number).padStart(3, "0"), call.name, call.age, call.created_at.replace("T", " "), statuses[call.status] || call.status]) {
+        const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+      }
+      const cell = document.createElement("td");
+      if (call.status === "complete") {
+        const link = document.createElement("a"); link.href = `/playground/calls/${call.number}/pdf`;
+        link.textContent = call.filename; cell.append(link);
+      } else cell.textContent = "—";
+      row.append(cell); $("call-list").append(row);
+    }
+    $("calls-note").textContent = calls.length ? "" : "No calls yet. Enter a name and age to begin.";
+  } catch (error) { $("calls-note").textContent = error.message; }
+}
+$("refresh-calls").onclick = refreshCalls;
 const bars = [...document.querySelectorAll(".levels i")];
 function animate() {
   const s = current; let level = s?.level || 0;
@@ -327,6 +358,7 @@ async function initialize() {
     $("prompt-note").textContent = "Included intake prompt · edit to customize";
     $("start").disabled = false;
   } catch (error) { showError(error.message); }
+  refreshCalls();
   animate();
 }
 initialize();

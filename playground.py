@@ -1,4 +1,4 @@
-"""Local browser voice demo. Sessions stay in memory; keys stay on the server."""
+"""Local browser voice demo. Named calls save a register/PDF; keys stay on the server."""
 import asyncio
 import base64
 import json
@@ -18,6 +18,7 @@ import browser_voice
 import llm
 import prompt_store
 import prompts
+import local_calls
 from agent import ConversationAgent, _FIELDS, _EMPTY
 
 router = APIRouter()
@@ -71,6 +72,7 @@ class BrowserAgent(ConversationAgent):
         self._text_task = None
         self._ending = False
         self._end_final = asyncio.Event()
+        self.local_record = None
 
     async def _emit(self, kind, payload):
         await self._send({"type": kind, "data": payload})
@@ -288,6 +290,8 @@ class BrowserAgent(ConversationAgent):
             fields = await llm.extract(list(self.history))
         except Exception as exc:
             log.warning("Browser extraction failed: %s", type(exc).__name__)
+            if self.local_record:
+                local_calls.set_status(self.local_record["number"], "summary_failed")
             await self._emit("slip_status", "Summary unavailable. Your transcript is still visible.")
             await self._emit("error", "Could not generate the summary; check Gemini access and try a new session.")
             return
@@ -296,6 +300,15 @@ class BrowserAgent(ConversationAgent):
             value = str(fields.get(key, "")).strip()
             self.session[key] = value if value and value.lower() not in _EMPTY and fields.get(key) is not None else "-"
         await self._emit("slip", {key: self.session[key] for key in _FIELDS})
+        if self.local_record:
+            try:
+                self.session["status"] = "complete"
+                self.local_record = local_calls.save_pdf(self.local_record, self.session)
+                await self._emit("saved_call", self.local_record)
+            except Exception as exc:
+                log.warning("Local PDF save failed: %s", type(exc).__name__)
+                local_calls.set_status(self.local_record["number"], "pdf_failed")
+                await self._emit("error", "Summary prepared, but the PDF could not be saved locally. Check disk access and space.")
 
     async def end_from_browser(self):
         if self._voice and self._stt_stream:
@@ -348,6 +361,11 @@ async def _on_text(agent, raw):
                 await agent._emit("error", "Add the missing API keys to the local .env file, then retry.")
                 await agent.ws.close(code=4401)
                 return
+            if "name" in data or "age" in data:
+                name, age = local_calls.validate(data.get("name"), data.get("age"))
+                agent.local_record = local_calls.create(agent.session_id, name, age)
+                agent.session.update(name=name, age=age)
+                await agent._emit("registered_call", agent.local_record)
             agent.started = True
             agent.mode, agent._voice = mode, mode == "voice"
             agent.system_prompt, agent.greeting = prompt.strip(), greeting.strip()
@@ -405,6 +423,27 @@ async def playground_stream(websocket: WebSocket):
         agent._closed = True
         agent._interrupt = True
         await agent._close_stream()
+        if agent.local_record:
+            record = local_calls.get(agent.local_record["number"])
+            if record["status"] == "in_call":
+                local_calls.set_status(record["number"], "interrupted")
+
+
+@router.get("/playground/calls")
+async def saved_calls():
+    return JSONResponse(local_calls.list_calls(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/playground/calls/{number}/pdf")
+async def saved_pdf(number: int):
+    record = local_calls.get(number)
+    if not record or record["status"] != "complete":
+        return JSONResponse({"error": "PDF not available"}, status_code=404)
+    path = local_calls.PDF_DIR / record["filename"]
+    if not path.is_file():
+        return JSONResponse({"error": "PDF file missing"}, status_code=404)
+    return FileResponse(path, media_type="application/pdf", filename=record["filename"],
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/playground/config")

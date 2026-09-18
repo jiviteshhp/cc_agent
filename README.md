@@ -47,8 +47,8 @@ Run the development server:
 uvicorn main:app --host 127.0.0.1 --port 8001 --reload --no-access-log --log-level warning
 ```
 
-Open `http://localhost:8001` for calls/recordings or `/playground` for browser
-testing. No login or resume button. **Never tunnel port 8001**: the website is
+Open `http://localhost:8001` (or `/playground`) for the browser demo; `/calls`
+shows phone call history. No login or resume button. **Never tunnel port 8001**: the website is
 local-only. No tunnel is needed for browser testing.
 
 ## Browser demo — current focus
@@ -63,7 +63,7 @@ on this machine; speech/text requests use Sarvam and Google cloud APIs.
    another prompt or edit the opening message, then **Use this prompt**. Your next
    session uses those edits automatically. **Save prompt locally** persists the
    conversation prompt; the opening message stays in this browser tab.
-3. Choose Priya, Ishita or Ritu and a speaking pace. Click **Start conversation**
+3. Enter a name and age, then choose Priya, Ishita or Ritu and a speaking pace. Click **Start conversation**
    and allow the microphone. Start speaking over the assistant to interrupt.
 4. Click **End & summarize**, or let the intake finish. Review the draft and
    optionally download it. **Reset** stops the session and releases the mic.
@@ -74,7 +74,8 @@ Gemini 3.6 Flash with minimal thinking → Bulbul v3 streamed as raw 24 kHz PCM.
 The browser has a short playback buffer and requests echo cancellation/noise
 suppression. Interruption cancels model/TTS work and clears scheduled audio.
 The same Gemini model extracts the summary after the conversation, with low
-thinking. No browser sessions or recordings are automatically written to disk.
+thinking. Named browser calls save a local register entry and a PDF on successful
+completion. Browser audio and full transcripts are not saved automatically.
 
 The model choice is a starting point for short Hindi intake, not a benchmarked
 winner. Provider access, recognition quality, voice preference and actual
@@ -158,13 +159,14 @@ node tests/test_audio_core.mjs
 
 The tests use synthetic fixtures and temporary directories. They do not call Vobiz, Sarvam, Gemini, or Groq and do not require `.env` or GitHub secrets.
 
-GitHub Actions runs the same command automatically on every push and every pull request targeting `main`. The workflow can also be started manually from the repository's **Actions** tab.
+GitHub Actions runs the Python tests on pushes to `main` and pull requests targeting `main`. The workflow can also be started manually from the repository's **Actions** tab.
 
 ## Runtime data
 
 The prototype creates `sessions/`, `recordings/`, `pdfs/`, and
-`prompt_override.json` locally. They are ignored by Git. Previous `state/`/SQLite
-files, if present, are no longer used and remain untouched and ignored. The two
+`prompt_override.json` locally. They are ignored by Git. The browser register uses `state/browser_calls.sqlite3`; local HTTPS certificates
+use `state/phone_https/`. These are ignored too. Older unused SQLite files remain
+untouched. The two
 local processes must run from the same repository directory to share call files.
 
 ## Team workflow
@@ -178,3 +180,25 @@ decisions and skips take precedence. New unrelated ideas belong in `BACKLOG.md`.
 ## Security
 
 Read `SECURITY.md`. Never use real patient data in development or automated tests.
+
+## Named local calls and PDFs
+
+Open http://localhost:8001/ (also `/playground`). Enter a name and age, start the
+conversation, then choose **End & summarize**. Successful completion saves a PDF
+as `001Name.pdf`, `002Name.pdf`, etc. in `pdfs/local_calls/`. The saved call list
+includes earlier calls and download links, including after restarting the server.
+Each start creates a fresh call, even when names repeat. Use English spelling
+for names with the existing PDF font. The local register is
+`state/browser_calls.sqlite3`. Speech and model processing still use the existing
+Sarvam/Google APIs; no hosting or tunnel is needed for this interface.
+
+## Android phone on its own hotspot
+
+Connect the laptop to your Android hotspot, then use the local HTTPS launcher:
+
+```bash
+.venv/bin/python scripts/phone_demo.py LAPTOP_WIFI_IP
+```
+
+For a new laptop, start with [the complete clone-to-Android setup](docs/ANDROID_HOTSPOT.md) for the one-time phone
+certificate installation and the HTTPS link. No public hosting or tunnel is used.

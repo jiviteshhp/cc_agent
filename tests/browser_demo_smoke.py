@@ -40,6 +40,11 @@ def run():
         actual = page.request.get(BASE + "/playground/config").json()
         configured = dict(actual, missing=[], voice_ready=True, text_ready=True)
         page.route("**/playground/config", lambda route: route.fulfill(json=configured))
+        saved = {"number": 1, "name": "Synthetic", "age": 30, "created_at": "2026-09-18T12:00:00", "status": "complete", "filename": "001Synthetic.pdf"}
+        page.route("**/playground/calls", lambda route: route.fulfill(json=[saved]))
+        page.route("**/playground/calls/1/pdf", lambda route: route.fulfill(
+            body=b"%PDF-1.4\nsynthetic UI download", content_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="001Synthetic.pdf"'}))
         pcm = b"".join(struct.pack("<h", int(1800 * math.sin(2 * math.pi * 440 * n / 24000))) for n in range(960))
         payload = base64.b64encode(pcm).decode()
 
@@ -70,6 +75,7 @@ def run():
                     send(ws, "status", "listening")
                 elif message["event"] == "end":
                     send(ws, "slip", {"laterality": "Left", "chief_complaint": "Synthetic redness", "duration": "2 days"})
+                    send(ws, "saved_call", saved)
                     send(ws, "done")
                     ws.close()
             ws.on_message(message)
@@ -80,6 +86,8 @@ def run():
         page.locator("#edit-prompt").click()
         page.locator("#prompt").fill("Synthetic ophthalmology prompt. Ask one question at a time.")
         page.locator("#use-prompt").click()
+        page.locator("#patient-name").fill("Synthetic")
+        page.locator("#patient-age").fill("30")
         page.locator("#start").click()
         page.wait_for_timeout(1500)
         if page.locator("#error").is_visible():
@@ -88,6 +96,7 @@ def run():
         page.wait_for_function("window.__audioStarts > 0")
         page.wait_for_timeout(150)
         assert frames and set(frames) == {640}, f"Expected 20 ms 16 kHz frames: {set(frames)}"
+        assert starts[0]["name"] == "Synthetic" and starts[0]["age"] == 30
         assert starts[0]["prompt"].startswith("Synthetic ophthalmology")
         assert page.evaluate("window.__tracks.some(t => t.readyState === 'live')")
         send(sockets[-1], "clear")
@@ -118,15 +127,19 @@ def run():
         page.screenshot(path="/tmp/optha-demo-synthetic-session.png", full_page=True)
         with page.expect_download() as download:
             page.locator("#download").click()
-        assert download.value.suggested_filename == "optha-demo-intake.txt"
+        assert download.value.suggested_filename == "001Synthetic.pdf"
         # Repeated start/reset must release the microphone and ignore old sockets.
         for _ in range(2):
+            page.locator("#patient-name").fill("Synthetic")
+            page.locator("#patient-age").fill("30")
             page.locator("#start").click()
             expect(page.locator("#end")).to_be_enabled()
             page.locator("#reset").click()
             expect(page.locator("#start")).to_be_enabled()
             assert page.evaluate("window.__tracks.every(t => t.readyState === 'ended')")
         page.locator("#text-mode").click()
+        page.locator("#patient-name").fill("Synthetic")
+        page.locator("#patient-age").fill("30")
         page.locator("#start").click()
         expect(page.locator("#text-input")).to_be_enabled()
         page.locator("#text-input").fill("<img src=x onerror=alert(1)> synthetic patient")

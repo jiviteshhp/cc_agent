@@ -1,11 +1,13 @@
 # Local website (app, port 8001) and tunnel-facing phone endpoints (phone_app,
-# port 8002). Bind both to 127.0.0.1; tunnel ONLY port 8002. See README.md.
+# port 8002). Default to loopback; phone_demo.py opts into private hotspot HTTPS.
+# Tunnel ONLY port 8002. See README.md.
 
 import base64
 import json
 import os
 import re
 import hmac
+import ipaddress
 from contextlib import asynccontextmanager
 from datetime import datetime
 from html import escape
@@ -44,7 +46,21 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]"])
+
+
+def local_browser_hosts():
+    hosts = ["localhost", "127.0.0.1", "[::1]"]
+    extra = os.getenv("LOCAL_DEMO_HOST", "").strip()
+    if extra:
+        address = ipaddress.IPv4Address(extra)
+        if not any(address in ipaddress.ip_network(network) for network in
+                   ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")):
+            raise ValueError("LOCAL_DEMO_HOST must be a private LAN IPv4 address")
+        hosts.append(str(address))
+    return hosts
+
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=local_browser_hosts())
 app.include_router(playground.router)   # /playground tester (isolated from calls)
 # This app has no website, recordings, prompt editor or API docs to expose.
 phone_app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -180,7 +196,11 @@ async def _on_text(agent, text):
         print(f"[{agent.session_id}] unknown event '{event}': {str(data)[:200]}")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
+async def local_home():
+    return await playground.playground_page()
+
+
 @app.get("/calls", response_class=HTMLResponse)
 async def calls_page():
     sessions = []

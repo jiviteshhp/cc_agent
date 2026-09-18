@@ -55,9 +55,9 @@ def _pdf_path(session):
     return os.path.join(PDF_DIR, f"{seq:04d}_{phone}({count}).pdf")
 
 
-def generate(session):
+def generate(session, output_path=None):
     os.makedirs(PDF_DIR, exist_ok=True)
-    path = _pdf_path(session)
+    path = output_path or _pdf_path(session)
     w, h = A5
     m = 20 * mm
     inner = w - 2 * m
