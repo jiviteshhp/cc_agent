@@ -33,6 +33,10 @@ mark decisions superseded when direction changes.
   reject active browser/phone calls, retain the complete previous source, and
   preflight the candidate's doctor routes/fixtures/PDFs without network or live
   data. The image includes the approved generated fixture audio as well as JSON.
+- The first candidate-image preflight caught unreadable nested fixture directories
+  after private-umask archive extraction. It stopped before service shutdown;
+  existing services and data stayed in place. Explicitly make packaged web and
+  fixture assets readable by the unprivileged runtime user in the Docker image.
 
 ## 2026-10-30 — Build the recording around three doctor-facing tabs
 

@@ -16,7 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 COPY web/ ./web/
 COPY fixtures/ ./fixtures/
-RUN mkdir -p /data/sessions /data/recordings /data/pdfs /data/state \
+# Release archives are extracted with a private umask on the deployment host.
+# Public source assets must remain readable by the unprivileged runtime user.
+RUN chmod -R a+rX /app/web /app/fixtures \
+    && mkdir -p /data/sessions /data/recordings /data/pdfs /data/state \
     && chown -R app:app /data
 USER app
 WORKDIR /data
