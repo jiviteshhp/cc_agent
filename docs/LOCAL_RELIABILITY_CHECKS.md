@@ -131,8 +131,8 @@ request is automatically made. Existing deadlines are unchanged.
 
 ## Extraction and opening
 
-The greeting sets an approximate seven-to-eight-question/two-minute expectation;
-it is not a hard limit. The seven original intake topics remain. At the user's
+The greeting identifies the AI assistant and asks which eye is affected, without
+announcing a question count or time estimate. The seven original intake topics remain. At the user's
 request, the final recap/confirmation question is removed: close directly after
 the intake, accept volunteered corrections, and clarify only unclear answers.
 No new clinical questions or treatment advice were added.

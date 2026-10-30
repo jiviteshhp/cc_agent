@@ -38,7 +38,7 @@ The screen includes live interim/final transcript, speech status, input/output
 level visualization, mic mute, reset and an intake summary after completion.
 Generated assistant text is distinguished from interrupted playback. The output
 is a draft; this demo does not send it to a clinic. The required intake topics
-remain. The opening now estimates seven–eight questions/about two minutes;
+remain. The shortened opening identifies the AI assistant and asks which eye is affected;
 extraction preserves more patient detail and uncertainty. See the
 [exact extraction prompt](EXTRACTION_PROMPT.md).
 

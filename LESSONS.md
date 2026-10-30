@@ -20,6 +20,12 @@ mark decisions superseded when direction changes.
 - Verification before rollout: 99 existing voice, observer, settings, opening-cache
   and deployment-safeguard tests passed (one existing Starlette/httpx warning).
   This verifies configured behavior; actual caller-heard audio is not yet tested.
+- Deployed `60bc646` on the existing feature branch. Both healthy AWS services
+  load the exact shortened greeting; the browser configuration exposes it too.
+  Candidate route/PDF preflight and HTTPS login protection passed. All 92 saved
+  call rows, 262 existing runtime files, environment and callback remain unchanged.
+  Rollback source/data/image are retained in
+  `/home/ubuntu/cc-agent-backups/phone-20261030T191633Z` (UTC timestamp).
 
 ## 2026-10-30 — AWS rollout and GitHub preservation authorized
 
