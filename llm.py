@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 import prompts
+import voice_diagnostics as diagnostics
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 THINKING = os.getenv("GEMINI_THINKING_LEVEL", "minimal")
@@ -17,6 +18,10 @@ FIRST_TEXT_TIMEOUT = float(os.getenv("LLM_FIRST_TEXT_TIMEOUT", "5"))
 CHUNK_TIMEOUT = float(os.getenv("LLM_CHUNK_TIMEOUT", "5"))
 REQUEST_TIMEOUT = float(os.getenv("LLM_REQUEST_TIMEOUT", "30"))
 _gemini = None
+
+
+class EmptyModelResponse(RuntimeError):
+    """Model ended its stream without usable text."""
 
 
 def _g():
@@ -51,6 +56,7 @@ def _to_contents(history):
 async def stream_reply(history, system=None):
     """One request, with one deadline covering connection through first text."""
     stream = None
+    stage = "first_text"
     try:
         deadline = asyncio.get_running_loop().time() + REQUEST_TIMEOUT
         async with asyncio.timeout(min(FIRST_TEXT_TIMEOUT, REQUEST_TIMEOUT)):
@@ -67,10 +73,11 @@ async def stream_reply(history, system=None):
                 try:
                     first = await anext(iterator)
                 except StopAsyncIteration:
-                    raise RuntimeError("LLM returned no text") from None
+                    raise EmptyModelResponse("LLM returned no text") from None
                 if first.text:
                     break
         yield first.text
+        stage = "stream"
         while True:
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
@@ -81,6 +88,9 @@ async def stream_reply(history, system=None):
                 break
             if chunk.text:
                 yield chunk.text
+    except Exception as exc:
+        diagnostics.report_failure("llm", stage, exc)
+        raise
     finally:
         if stream is not None:
             await stream.aclose()
@@ -93,21 +103,28 @@ async def warm():
 
 
 def _transcript(history):
-    return "\n".join(
-        f"{'Assistant' if m['role'] == 'assistant' else 'Patient'}: {m['content']}"
-        for m in history
-    )
+    # Preserve role boundaries even when speech contains labels or newlines.
+    return json.dumps([{"role": m["role"], "content": m["content"]}
+                       for m in history if m["role"] in ("user", "assistant")], ensure_ascii=False)
 
 
-async def extract(history):
+async def extract(history, *, system=None):
+    try:
+        return await _extract_once(history, system=system)
+    except Exception as exc:
+        diagnostics.report_failure("llm", "extraction", exc)
+        raise
+
+
+async def _extract_once(history, *, system=None):
     if not history:
         return {}
     async with asyncio.timeout(REQUEST_TIMEOUT):
         response = await _g().aio.models.generate_content(
             model=MODEL, contents=_transcript(history),
             config=types.GenerateContentConfig(
-                system_instruction=prompts.EXTRACT_PROMPT,
-                max_output_tokens=2048, thinking_config=types.ThinkingConfig(thinking_level="low"),
+                system_instruction=prompts.EXTRACT_PROMPT if system is None else system,
+                max_output_tokens=4096, thinking_config=types.ThinkingConfig(thinking_level="medium"),
                 response_mime_type="application/json",
             ),
         )
@@ -117,4 +134,12 @@ async def extract(history):
         raise ValueError("Model returned invalid summary JSON") from None
     if not isinstance(fields, dict):
         raise ValueError("Model summary must be an object")
+    allowed = set(prompts.EXTRACT_FIELDS) | {"branch"}
+    if any(key not in allowed or not isinstance(value, str) or not value.strip()
+           for key, value in fields.items()):
+        raise ValueError("Model summary has invalid fields or values")
+    if fields.get("laterality", "Right") not in {"Right", "Left", "Both"}:
+        raise ValueError("Model summary has invalid laterality")
+    if fields.get("branch", "other") not in {"redness", "blurring", "itching", "trauma", "lid", "other"}:
+        raise ValueError("Model summary has invalid branch")
     return fields

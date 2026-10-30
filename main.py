@@ -25,6 +25,7 @@ import llm
 import playground
 import recorder
 import call_access
+import local_calls
 from agent import ConversationAgent
 
 
@@ -41,6 +42,18 @@ async def lifespan(app):
             print(f"[warm] unavailable: {type(exc).__name__}")
     else:
         print("[warm] skipped: add GEMINI_API_KEY to .env for live conversations")
+    if playground.configuration()['s2s_ready']:
+        try:
+            import s2s
+            import prompt_store
+            await s2s.prepare_first_message(prompt_store.saved_first_message())
+            print('[warm] native first message ready')
+        except Exception as exc:
+            print(f'[warm] native first message unavailable: {type(exc).__name__}')
+    if app is phone_app and os.getenv('PHONE_VOICE_ENGINE', 'cascaded').strip().lower() == 'cascaded':
+        import filler_audio
+        count = await filler_audio.prepare_all()
+        print(f'[warm] phone fillers ready: {count}/{len(filler_audio.PHRASES)}')
     print("server ready")
     yield
 
@@ -57,6 +70,15 @@ def local_browser_hosts():
                    ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")):
             raise ValueError("LOCAL_DEMO_HOST must be a private LAN IPv4 address")
         hosts.append(str(address))
+    hosted = os.getenv("WEB_HOST", "").strip().lower()
+    if hosted:
+        # Opt in to exactly one DNS name; no schemes, ports or wildcards.
+        labels = hosted.split(".")
+        if (len(hosted) > 253 or len(labels) < 2 or
+                any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                    for label in labels)):
+            raise ValueError("WEB_HOST must be one DNS hostname without scheme, port or path")
+        hosts.append(hosted)
     return hosts
 
 
@@ -78,6 +100,7 @@ async def local_browser_writes(request: Request, call_next):
 
 
 @app.get("/healthz")
+@phone_app.get("/healthz")
 async def healthz():
     # Liveness only; provider availability is measured by synthetic calls.
     return {"status": "ok"}
@@ -99,6 +122,7 @@ async def answer(request: Request):
     if not host or host.startswith(("localhost", "127.0.0.1")) or "/" in host:
         return Response("Set SERVER_HOST to the public tunnel hostname", status_code=503)
     ticket = call_access.issue_ticket(str(caller))
+    input_rate = 16000 if os.getenv("PHONE_VOICE_ENGINE", "cascaded").strip().lower() == "s2s" else 8000
     # Only documented Vobiz attributes. The former noiseCancellation/Level
     # flags are not in its Stream reference; don't promise unverified DSP.
     xml = (
@@ -108,9 +132,10 @@ async def answer(request: Request):
         '        bidirectional="true"\n'
         '        keepCallAlive="true"\n'
         '        audioTrack="inbound"\n'
-        '        contentType="audio/x-l16;rate=8000">\n'
+        f'        contentType="audio/x-l16;rate={input_rate}">\n'
         f"        wss://{escape(host)}/stream?ticket={ticket}\n"
         "    </Stream>\n"
+        "    <Hangup/>\n"
         "</Response>"
     )
     return Response(content=xml, media_type="application/xml")
@@ -122,19 +147,22 @@ async def stream(websocket: WebSocket):
     if raw_phone is None:
         await websocket.close(code=4403)
         return
+    # Snapshot the configured engine once; an active call never changes engines.
+    engine = os.getenv("PHONE_VOICE_ENGINE", "cascaded").strip().lower()
+    if engine not in {"cascaded", "s2s"}:
+        await websocket.close(code=1011)
+        return
     await websocket.accept()
-    phone_digits = re.sub(r"\D", "", raw_phone)[-10:]
+    session_data = session_manager.new_phone_session(raw_phone)
 
-    session_data = (session_manager.find_session_by_phone(phone_digits)
-                    if phone_digits else None)
-    if not session_data:
-        session_data = session_manager.new_session(
-            "Walk-in", "-", "-", phone_digits or "unknown")
-        print(f"auto session {session_data['session_id']} for {phone_digits}")
-
-    agent = ConversationAgent(websocket, session_data)
+    if engine == "s2s":
+        from s2s import GeminiPhoneAgent
+        agent = GeminiPhoneAgent(websocket, session_data)
+    else:
+        agent = ConversationAgent(websocket, session_data)
+        agent.session["voice_engine"] = "cascaded"
     agent.recorder = recorder.CallRecorder(agent.session_id)
-    print(f"[{agent.session_id}] call connected ({phone_digits})")
+    print(f"[phone] call connected (engine={engine})")
     try:
         while True:
             msg = await websocket.receive()
@@ -163,11 +191,11 @@ async def _on_text(agent, text):
             return                    # format/stream identity cannot change mid-call
         s = data.get("start", {})
         fmt = s.get("mediaFormat") or {}
-        # This pipeline expects raw mono 8 kHz PCM throughout. Reject a
+        # Validate the selected engine's real input format. Reject a
         # negotiated mismatch instead of feeding incorrectly labelled ASR audio.
         if (not s.get("streamId")
                 or fmt.get("encoding") != "audio/x-l16"
-                or str(fmt.get("sampleRate")) != "8000"
+                or str(fmt.get("sampleRate")) != str(getattr(agent, "input_rate", 8000))
                 or str(fmt.get("channels", 1)) != "1"
                 or s.get("tracks", ["inbound"]) != ["inbound"]):
             print(f"[{agent.session_id}] unsupported inbound audio format/track")
@@ -190,7 +218,9 @@ async def _on_text(agent, text):
             await agent.on_audio(raw)
     elif event == "stop":
         print(f"[{agent.session_id}] stop event received")
-    elif event in ("clearedAudio", "playedStream", "mark", "dtmf"):
+    elif event == "playedStream":
+        agent.playback_finished(data.get("name"))
+    elif event in ("clearedAudio", "mark", "dtmf"):
         pass   # Vobiz acks / signals we don't act on; not errors
     else:
         print(f"[{agent.session_id}] unknown event '{event}': {str(data)[:200]}")
@@ -231,7 +261,7 @@ async def calls_page():
     for s in sessions:
         st = s.get("status", "")
         sc = colors.get(st, "#666")
-        phone = re.sub(r"\D", "", s.get("phone") or "")[-10:] or "—"
+        phone = escape(str(s.get("call_label") or s.get("phone") or "—"))
         ts = (s.get("call_start") or s.get("created_at") or "")[:16].replace("T", " ")
         sid = escape(str(s.get("session_id", "")), quote=True)
         rows += (f"<tr><td><a href='/calls/{sid}'><b>{phone}</b></a></td><td>{escape(str(s.get('name','')))}</td>"
@@ -264,7 +294,8 @@ a{{color:#1a6db5;text-decoration:none}} a:hover{{text-decoration:underline}}
 SLIP_LABELS = [("Chief complaint", "chief_complaint"), ("Eye", "laterality"),
                ("Duration", "duration"), ("Follow-up", "dynamic_follow_up"),
                ("Prior treatment", "prior_treatment"), ("Comorbidities", "comorbidities"),
-               ("Medications", "medications")]
+               ("Medications", "medications"), ("Additional details", "additional_details"),
+               ("Uncertainties", "uncertainties")]
 
 
 def _recordings_aggregate():
@@ -316,6 +347,8 @@ async def call_detail(session_id: str):
         sess = session_manager.load_session(sid)
     except Exception:
         sess = None
+    if rec is None and sess is None:
+        return Response(status_code=404)
     return _render_call_detail(sid, rec, sess)
 
 
@@ -323,13 +356,14 @@ def _render_call_detail(sid, rec, sess):
     sid = escape(str(sid), quote=True)
     base = rec or sess or {}
     name = escape(str(base.get("name") or "—"))
-    phone = re.sub(r"\D", "", base.get("phone") or "")[-10:] or "—"
+    phone = escape(str(base.get("call_label") or base.get("phone") or "—"))
     status = escape(str(base.get("status") or "—"))
 
     if rec and rec.get("audio"):
         audio_html = (f"<audio id='player' controls preload='metadata' "
                       f"src='/recordings/{escape(str(rec['audio']), quote=True)}' style='width:100%'></audio>"
-                      f"<div class='hint'>Full conversation · new recordings mix both voices into mono · click a turn to jump</div>")
+                      f"<div class='hint'>One mono recording · caller and assistant together · click a turn to jump</div>"
+                      f"<p><a href='/calls/{sid}/audio'>Download recording</a></p>")
     else:
         audio_html = "<div class='hint'>No audio recorded for this call.</div>"
 
@@ -406,7 +440,7 @@ td{{padding:5px 8px;border-bottom:1px solid #f0f0f0;vertical-align:top}}
 td.k{{color:#777;width:120px;font-size:12px}}
 td.cc{{font-weight:700;color:#1a6db5}}
 </style></head><body>
-<div class="sub"><a href="/calls">&larr; all calls</a></div>
+<div class="sub"><a href="/playground">&larr; saved calls</a> · <a href="/calls">Telephone history</a></div>
 <h1>{name} &middot; {phone}</h1>
 <div class="sub">{sid} &middot; status: {status}</div>
 <div class="cards">{cards_html}</div>
@@ -433,6 +467,9 @@ async def _finalize(agent):
     agent._interrupt = True
     await agent._close_stream()   # idempotent; finish() already closed it on clean ends
     s = agent.session
+    if s.get("local_call_number"):
+        await _finalize_registered_phone(agent)
+        return
     if s.get("status") != "complete":
         s["call_end"] = datetime.now().isoformat(timespec="seconds")
         try:
@@ -450,3 +487,48 @@ async def _finalize(agent):
     if agent.recorder:
         agent.recorder.finalize(s)   # idempotent; now the slip fields are present
     print(f"[{agent.session_id}] ws closed (status={s.get('status')})")
+
+
+async def _finalize_registered_phone(agent):
+    s = agent.session
+    record = local_calls.get(s["local_call_number"])
+    status = "save_failed"
+    try:
+        local_calls.set_status(record["number"], "finalizing")
+        if s.get("status") != "complete":
+            s["call_end"] = s.get("call_end") or datetime.now().isoformat(timespec="seconds")
+            await agent.finalize_slip()
+            s["status"] = ("complete" if getattr(agent, "_ended", False) else
+                           "partial" if s.get("chief_complaint") not in (None, "", "-") else "dropped")
+        status = "summary_failed" if getattr(agent, "_extraction_failed", False) else s["status"]
+        s["status"] = status
+        session_manager.save_session(s)
+        if status in {"complete", "partial"}:
+            try:
+                local_calls.save_pdf(record, s, update_status=False)
+            except Exception as exc:
+                status = "pdf_failed"
+                print(f"[phone] PDF save failed: {type(exc).__name__}")
+    except Exception as exc:
+        status = "save_failed"
+        print(f"[phone] call save failed: {type(exc).__name__}")
+    finally:
+        # Preserve transcript/audio even if extraction or PDF generation fails.
+        try:
+            if agent.recorder:
+                agent.recorder.finalize(s)
+        except Exception as exc:
+            status = "recording_failed"
+            print(f"[phone] recording save failed: {type(exc).__name__}")
+        local_calls.set_status(record["number"], status)
+
+
+@app.get("/calls/{session_id}/audio")
+async def call_audio_download(session_id: str):
+    sid = os.path.basename(session_id)
+    path = os.path.join(recorder.RECORDINGS_DIR, f"{sid}.wav")
+    if not os.path.isfile(path):
+        return Response(status_code=404)
+    filename = sid.removeprefix("phone_") + ".wav"
+    return FileResponse(path, media_type="audio/wav", filename=filename,
+                        headers={"Cache-Control": "no-store"})

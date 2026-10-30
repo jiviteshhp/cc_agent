@@ -1,0 +1,28 @@
+{
+    log default {
+        format filter {
+            wrap json
+            fields {
+                request>uri delete
+                request>headers>Cookie delete
+                request>headers>Authorization delete
+            }
+        }
+    }
+}
+
+{$WEB_HOST} {
+    header Strict-Transport-Security "max-age=31536000"
+    # Only these exact transport paths bypass browser login. /answer validates
+    # the webhook secret; /stream requires its short-lived, single-use ticket.
+    @phone path /answer /stream
+    handle @phone {
+        reverse_proxy phone:8002
+    }
+    handle {
+        basic_auth {
+            demo {$DEMO_PASSWORD_HASH}
+        }
+        reverse_proxy app:8001
+    }
+}

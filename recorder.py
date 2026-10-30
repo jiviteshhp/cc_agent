@@ -21,7 +21,7 @@ RECORDINGS_DIR = "recordings"
 # The doctor's-slip fields, snapshotted into the recording JSON for the review
 # page. Kept here (not imported from agent) to avoid an import cycle.
 _SLIP_FIELDS = ("chief_complaint", "laterality", "duration", "dynamic_follow_up",
-                "prior_treatment", "comorbidities", "medications")
+                "prior_treatment", "comorbidities", "medications", "additional_details", "uncertainties")
 
 
 class CallRecorder:
@@ -98,6 +98,9 @@ class CallRecorder:
 
     def barge_in(self):
         self.n_barge_ins += 1
+        self.clear_outbound()
+
+    def clear_outbound(self):
         # Playback timing is a local estimate, not provider-confirmed delivery.
         # Trim the queued outbound tail at the local clear request; keep every
         # inbound sample, including the overlapping interruption.
@@ -119,8 +122,11 @@ class CallRecorder:
         doc = {
             "session_id": sid,
             "status": session.get("status"),
+            "voice_engine": session.get("voice_engine", "cascaded"),
             "name": session.get("name"),
             "phone": session.get("phone"),
+            "call_label": session.get("call_label"),
+            "call_index": session.get("call_index"),
             "call_start": session.get("call_start"),
             "call_end": session.get("call_end"),
             "audio": f"{sid}.wav" if have_audio else None,

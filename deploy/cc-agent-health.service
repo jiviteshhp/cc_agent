@@ -1,0 +1,10 @@
+[Unit]
+Description=Recover an unhealthy CC Agent process
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cc-agent
+ExecStart=/bin/sh /opt/cc-agent/deploy/check-health.sh
+TimeoutStartSec=90

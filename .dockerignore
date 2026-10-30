@@ -19,6 +19,9 @@ logs
 mining_output
 VERIFIED_REAL_CALLS*
 prompt_override.json
+state
+*.sqlite3
+*.sqlite3-*
 *.wav
 *.mp3
 *.m4a
