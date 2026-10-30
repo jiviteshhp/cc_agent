@@ -2,8 +2,10 @@
 
 The homepage now has three tabs: **Live call**, **Reports**, and **Aftercare**.
 The original browser intake remains at `/playground` and the older care workspace
-remains at `/care`. Nothing has been deployed or changed on the current phone
-number. AWS rollout is deferred by the user.
+remains at `/care`. The portal is deployed at
+**https://cc-agent.duckdns.org/doctor** with the existing website login and phone
+number configuration. See the [release record](DEPLOYMENT_2026-10-30.md) for
+preserved GitHub branches, verification and rollback.
 
 ## Launch locally
 
@@ -63,21 +65,21 @@ opens a carrier connection or writes to existing call records. It records the
 screen, without microphone or telephone audio. The MP4 includes a subtitle track;
 enable subtitles in the player or use the SRT in the video editor.
 
-## Record the incoming call after deployment
+## Record an incoming call on AWS
 
 Both AWS services must run the same updated application image and share `/data`.
 The existing Compose layout provides this shared volume; Docker now copies the
-prepared fixture JSON too. The observer database sits beside the existing call
+prepared fixture JSON and generated audio too. The observer database sits beside the existing call
 register at `state/doctor_phone.sqlite3`. Keep one worker per service. The observer
 API is on the website only, never the public telephone application. Existing
 provider credentials, configured engine and Vobiz routing remain unchanged by
-this implementation. No image build or deployment was performed this turn.
+this release. Both services run the same verified application image.
 
 After deployment and a successful real call check, use:
 
 ```bash
 uv run --with playwright python scripts/record_doctor_portal.py \
-  --wait-for-call --base-url https://YOUR-WEBSITE-HOST \
+  --wait-for-call --base-url https://cc-agent.duckdns.org \
   --output recordings/doctor-portal-real-call --staff "Your name"
 ```
 
@@ -123,9 +125,18 @@ and case checks reject unrelated files. Existing intake calls, PDFs, recordings,
 phone counters, live snapshots and previous care/recovery stores remain intact.
 There is no blanket reset of real call history.
 
+On the AWS host, the equivalent command is:
+
+```bash
+sudo docker exec cc-agent-app-1 python -c "import doctor_records; doctor_records.reset_prepared()"
+```
+
+Run this only when intentionally resetting the prepared case for another
+recording; it clears that case's acknowledgement, disposition and room edits.
+
 ## Verification and boundaries
 
-- 488 Python tests passed, including observer concurrency, both phone engines,
+- 504 Python tests passed, including release safeguards, observer concurrency, both phone engines,
   source rejection, missing/corrected information, stale-call detection, deletion
   races, prior intake/PDF behavior, prepared aftercare, staff actions and safe reset.
   One pre-existing Starlette/httpx deprecation warning remains.
@@ -142,8 +153,12 @@ There is no blanket reset of real call history.
 - One real configured-model probe on fictional Hindi text returned supported
   chief complaint, eye and duration fields in 2.45 seconds. This is one functional
   sample, not a latency benchmark or clinical validation.
-- Actual incoming carrier audio, simultaneous provider response/draft performance,
-  AWS deployment, outbound aftercare calling and external SMS/notifications remain
+- AWS activation passed candidate checks and runtime route/PDF checks. Both
+  services are healthy; existing configuration and all 89 calls/249 runtime files
+  retained their hashes. Website authentication, TLS and phone route isolation
+  were checked; all 77 packaged runtime files match the release in both services.
+- Actual incoming carrier audio and simultaneous provider response/draft performance
+  still need a consenting friend's call. Outbound aftercare calling and external SMS/notifications remain
   unverified or unimplemented. The protocol remains illustrative and requires the
   named clinical owner before real clinical use. Staff labels are self-entered.
 

@@ -1,11 +1,23 @@
 # Deploy the browser and Vobiz phone MVP on AWS
 
-Prepared 2026-09-23. One Ubuntu EC2 instance runs the website and voice backend,
+Updated 2026-10-30. One Ubuntu EC2 instance runs the website and voice backend,
 Caddy HTTPS, a shared demo password, and persistent call/PDF storage. No GPU is
 needed: Gemini and Sarvam run via their APIs. This guide supersedes the old
 `docs/HOSTING.md` instructions. The app is deployed at
-https://cc-agent.duckdns.org; see `LESSONS.md` for the latest rollout.
-See `LESSONS.md` for deployment verification and the current rollback location.
+https://cc-agent.duckdns.org. The homepage is now the doctor portal; browser voice
+intake remains at `/playground`. See the [2026-10-30 release record](DEPLOYMENT_2026-10-30.md)
+for verified preservation of 89 calls/249 files, GitHub branches and rollback.
+
+For an existing installation, upload the reviewed release archive and its rollout
+script, then run the new script without engine flags to preserve all settings:
+
+```bash
+sudo python3 /home/ubuntu/aws_rollout.py /home/ubuntu/doctor-portal-release.tar.gz
+```
+
+The script builds and preflights before stopping services, refuses active calls,
+backs up source/config/data and retains the old image. It preserves `.env` bytes
+and the callback secret. Never replace `.env` with the example on an existing host.
 
 The Gemini phone update uses the existing services, number and callback URL.
 For a prepared archive containing `tests/live_phone_s2s.py`, the rollout can check
@@ -96,8 +108,10 @@ ssh -i /path/to/cc-agent.pem ubuntu@YOUR_ELASTIC_IP
 ```
 
 This explicit file list excludes `.env`, Git history, local call records, PDFs,
-recordings and local certificates. The archive contains these local changes;
-cloning the old remote branch alone does not include them.
+recordings and local certificates. The current release is preserved in GitHub on
+`feat/doctor-portal-symphony`; the previous AWS source has its own archive branch.
+The extraction/setup steps below are for a new host; use the rollout script above
+to update an existing installation.
 
 On EC2:
 
@@ -193,8 +207,9 @@ sudo docker compose -f compose.yaml -f compose.production.yaml logs --tail=80 ap
 ```
 
 `config --quiet` validates without printing environment secrets. Build may take
-several minutes. Open `https://demo.example.com`, sign in as `demo`, allow the
-microphone and test with synthetic information first. Confirm:
+several minutes. Open `https://demo.example.com`, sign in as `demo`, and use
+`/playground` for microphone testing with fictional information. The homepage
+monitors incoming telephone calls. Confirm:
 
 1. An incognito visit without the password gets a login challenge, including PDF
    links and `/playground/config`.
@@ -240,12 +255,13 @@ The named `app-data` Docker volume holds SQLite, PDFs and other runtime files.
 It survives container replacement/reboot but not disk loss. Never run
 `docker compose down -v` when you need saved records. Set up EBS snapshots with
 retention in AWS and test restoring one to a separate instance. For a consistent
-snapshot, finish active calls, stop the app, initiate the snapshot, then start the
-app again; backups/maintenance can briefly interrupt availability and cost extra.
+snapshot, finish active calls, stop both app and phone, initiate the snapshot,
+then start both again; backups/maintenance can briefly interrupt availability and cost extra.
 
-For updates, upload a new explicit-file archive, extract it in `/opt/cc-agent`,
-then run the same `up -d --build` command during a quiet period. Preserve `.env`
-and volume names. Do not rerun `cp .env.example .env` on an existing deployment.
+For updates, upload a reviewed release archive and use its `deploy/aws_rollout.py`
+as described above during a quiet period. Do not manually overwrite live source
+before candidate checks. Preserve `.env` and volume names; the rollout retains
+private backups and a rollback script without restoring old data over new calls.
 Changing the shared password requires a new hash and recreating Caddy; already
 open WebSockets may remain until closed, so schedule credential rotation with a
 proxy restart. No automatic dependency upgrades/redeployments are enabled.
@@ -282,7 +298,7 @@ routing or speech-provider quality; a real call is still required.
 - [Caddy shared password](https://caddyserver.com/docs/caddyfile/directives/basic_auth)
 - [Saaras v4 realtime](https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/realtime-streaming)
 
-Local automated checks are recorded in `docs/PR_AWS_DEMO.md`. Actual AWS signup,
-DNS/certificate issuance, reboot recovery and live provider quality must be
-verified on the selected server. No cloud resources or public repository updates
-have been created by this preparation.
+Latest verification is recorded in `docs/DEPLOYMENT_2026-10-30.md` and
+`docs/PR_DOCTOR_PORTAL.md`: the existing EC2 deployment was updated, TLS and route
+protection passed, and prior source was preserved on GitHub. Reboot recovery,
+end-to-end carrier quality and clinical validation were not tested in this release.

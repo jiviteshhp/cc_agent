@@ -37,6 +37,26 @@ mark decisions superseded when direction changes.
   after private-umask archive extraction. It stopped before service shutdown;
   existing services and data stayed in place. Explicitly make packaged web and
   fixture assets readable by the unprivileged runtime user in the Docker image.
+- Activated release `b9d5240` from `feat/doctor-portal-symphony` on the existing
+  EC2 host at https://cc-agent.duckdns.org/doctor. Both services use image
+  `cc-agent-app:phone-20261030T123929Z`; source/config/data and the previous image
+  are retained under `/home/ubuntu/cc-agent-backups/phone-20261030T123929Z`.
+- Verification: 504 Python tests passed locally. Actual candidate-image preflight,
+  runtime doctor/original-intake routes, both prepared PDFs, HTTPS/login guards,
+  phone route isolation and provider warm-up passed. All 77 packaged runtime
+  files match the release in both healthy services; effective phone engine and
+  model settings are unchanged. All 89 old call rows, 249 old runtime files,
+  `.env` and the private callback file retain their hashes. All 31 local runtime
+  files also remain unchanged. Backup archives are readable and rollback script
+  syntax/image availability were checked; rollback was not executed.
+- An existing saved intake PDF also passed its original deployed download route
+  and matched the file bytes. Verification output contains counts/status only,
+  not patient text or identities.
+- The incoming-call presentation is now available on AWS; the prior deployment
+  deferral is superseded. Real carrier-to-transcript/draft behavior still requires
+  a consenting friend's incoming call. No outbound call, SMS, external handover
+  delivery or clinical validation was performed. Prior local browser/rehearsal
+  checks remain fixture based. See `docs/DEPLOYMENT_2026-10-30.md`.
 
 ## 2026-10-30 — Build the recording around three doctor-facing tabs
 

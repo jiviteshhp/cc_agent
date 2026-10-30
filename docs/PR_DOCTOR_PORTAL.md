@@ -19,11 +19,11 @@ local acknowledgement/disposition. Clinical resolution and external delivery
 are not implied. The current incoming caller is never automatically linked to
 the prepared case.
 
-Validation: 488 Python tests passed (one existing deprecation warning), actual
+Validation: 504 Python tests passed (one existing deprecation warning), actual
 isolated-backend Chrome journey passed, original intake browser smoke passed,
 Node audio and syntax checks passed. PDFs and desktop/mobile renders inspected.
 A separate real-model fictional-text probe returned three evidence-supported
-fields. No real carrier call, deployment or clinical validation was performed.
+fields. No real carrier call or clinical validation was performed in this release.
 
 `scripts/record_doctor_portal.py` records either an explicitly labelled isolated
 120-second rehearsal or waits for a real new incoming call. It never silently
@@ -31,6 +31,16 @@ substitutes prepared input. Recording has subtitles and no captured call audio.
 Launch/reset, narration and reproduction are in `docs/DOCTOR_PORTAL.md`.
 
 Existing changes and records are preserved. The older intake/care routes remain.
-The Dockerfile now includes required fixture JSON for the later image build;
-nothing was built for production, pushed, deployed or sent externally. Clinical
-owner and second-founder review remain outstanding.
+The Dockerfile includes required fixtures with readable asset permissions for
+the unprivileged runtime. Authorized AWS rollout preserves the environment,
+callback, shared data volume and previous image; it preflights routes/PDFs before
+stopping services and refuses active calls. All 89 prior call rows and 249 files
+were verified unchanged after activation. Both services are healthy; HTTPS,
+authentication, phone route isolation and runtime PDFs passed checks.
+
+Previous deployed source is preserved on `archive/aws-before-doctor-portal-20261030`;
+new work is on `feat/doctor-portal-symphony`. No existing branch was rewritten.
+Private source/config/data backups and rollback remain on EC2; secrets and runtime
+records are excluded from GitHub. See `docs/DEPLOYMENT_2026-10-30.md`.
+Clinical-owner and second-founder review remain outstanding. No outbound patient
+call or external notification was sent.

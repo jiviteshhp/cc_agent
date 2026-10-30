@@ -17,7 +17,8 @@ privacy controls remain incomplete.
 
 - Doctor portal at `/`: live telephone transcript/draft extraction, source-linked
   printable reports and prepared aftercare review. See the [launch and recording
-  guide](docs/DOCTOR_PORTAL.md). AWS rollout of this portal is deferred.
+  guide](docs/DOCTOR_PORTAL.md). Deployed on AWS on 2026-10-30; see the
+  [release and preservation record](docs/DEPLOYMENT_2026-10-30.md).
 - FastAPI webhook and bidirectional WebSocket for Vobiz calls
 - Sarvam streaming speech-to-text and text-to-speech
 - Configurable Gemini text model for cascaded conversation and post-call extraction
@@ -53,7 +54,7 @@ Run the development server:
 uvicorn main:app --host 127.0.0.1 --port 8001 --reload --no-access-log --log-level warning
 ```
 
-Open `http://localhost:8001` (or `/playground`) for the browser demo; `/calls`
+Open `http://localhost:8001` for the doctor portal, or `/playground` for browser intake; `/calls`
 shows phone call history. No login or resume button. **Never tunnel port 8001**: the website is
 local-only. No tunnel is needed for browser testing.
 
@@ -211,8 +212,10 @@ local processes must run from the same repository directory to share call files.
 ## Team workflow
 
 Read `LESSONS.md` and `CONTRIBUTING.md` before changing code. Current priority is
-the local ophthalmology web voice demo; deployment is deferred and Phase 2
-is complete per the user. Do not push these changes without a new user request.
+the doctor portal and dependable voice intake. The user authorized the 2026-10-30
+AWS release and GitHub preservation on separate feature/archive branches;
+existing branch history and runtime records remain intact. Phase 2 was reported
+complete. Further releases still require user authorization.
 `MVP_EXECUTION_PLAN.md` preserves the original roadmap as guidance. Explicit user
 decisions and skips take precedence. New unrelated ideas belong in `BACKLOG.md`.
 
@@ -222,7 +225,7 @@ Read `SECURITY.md`. Never use real patient data in development or automated test
 
 ## Named local calls and PDFs
 
-Open http://localhost:8001/ (also `/playground`). Enter a name and age, start the
+Open http://localhost:8001/playground. Enter a name and age, start the
 conversation, then choose **End & summarize**. Successful completion saves a PDF
 as `001Name.pdf`, `002Name.pdf`, etc. in `pdfs/local_calls/`. The saved call list
 includes earlier calls and download links, including after restarting the server.
@@ -252,7 +255,7 @@ and the [local review description](docs/PR_RECOVERY_DEMO.md).
 
 ## Connected care workspace
 
-Open `/` or `/care` for clinician and patient views across history review, surgery
+Open `/care` for clinician and patient views across history review, surgery
 and scheduled follow-up. Original live intake stays at `/playground`. See
 [care workspace launch and recording guide](docs/CARE_WORKSPACE.md) and
 [local PR description](docs/PR_CARE_WORKSPACE.md). Calls in the supplied synthetic
