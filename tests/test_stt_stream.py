@@ -16,7 +16,7 @@ def synthetic_env(monkeypatch):
     # Local .env must never select providers or affect offline test parameters.
     import os
     for key in tuple(os.environ):
-        if key.startswith(("SARVAM_STT_", "SARVAM_VAD_")):
+        if key.startswith(("SARVAM_STT_", "SARVAM_VAD_", "BROWSER_STT_", "BROWSER_VAD_")):
             monkeypatch.delenv(key)
     monkeypatch.setenv("SARVAM_API_KEY", "synthetic-not-a-real-key")
 
@@ -88,6 +88,8 @@ def test_new_protocol_pcm_and_callbacks(monkeypatch):
         assert params["sample_rate"] == ["8000"]
         assert params["encoding"] == ["linear16"]
         assert params["stream_type"] == ["fast"]
+        assert params["threshold"] == ["0.3"]
+        assert params["min_speech_duration_ms"] == ["250"]
         assert kwargs["additional_headers"] == {"Api-Subscription-Key": "synthetic-not-a-real-key"}
         assert "synthetic-not-a-real-key" not in url
         await stream.close()
@@ -98,14 +100,21 @@ def test_new_protocol_pcm_and_callbacks(monkeypatch):
 
 def test_fatal_access_error_fails_start_without_retry_or_logging_payload(monkeypatch, caplog):
     async def run():
-        socket = Socket({"event": "error", "is_fatal": True, "message": "SENSITIVE-SYNTHETIC"})
+        socket = Socket({"event": "error", "is_fatal": True,
+                         "code": "rate_limit_exceeded_error", "message": "SENSITIVE-SYNTHETIC"})
         calls = []
+        diagnostics = []
         connector(monkeypatch, socket, calls)
-        stream = stt_stream.StreamingSTT(lambda: None, lambda t: None)
+        stream = stt_stream.StreamingSTT(lambda: None, lambda t: None, on_diagnostic=diagnostics.append)
         with pytest.raises(stt_stream.STTUnavailable):
             await stream.start()
         assert len(calls) == 1 and socket.closed
         assert "SENSITIVE-SYNTHETIC" not in caplog.text
+        assert len(diagnostics) == 1
+        assert diagnostics[0]["component"] == "asr"
+        assert diagnostics[0]["stage"] == "session_ack"
+        assert diagnostics[0]["category"] == "rate_limited"
+        assert "SENSITIVE-SYNTHETIC" not in json.dumps(diagnostics)
 
     asyncio.run(run())
 
@@ -176,6 +185,49 @@ def test_optional_terminology_and_explicit_model_override(monkeypatch):
     params = stt_stream.connection_params(16000)
     assert params["prompt"] == "synthetic terminology"
     assert params["model"] == "saaras:v3-realtime"
+
+
+def test_browser_noise_profile_is_independent_of_existing_phone_env(monkeypatch):
+    monkeypatch.setenv("SARVAM_VAD_THRESHOLD", "0.2")
+    monkeypatch.setenv("SARVAM_VAD_MIN_SPEECH_MS", "100")
+    monkeypatch.setenv("SARVAM_STT_STREAM_TYPE", "fast")
+    params = stt_stream.connection_params(16000, profile="browser")
+    assert params["threshold"] == .6
+    assert params["min_speech_duration_ms"] == 150
+    assert params["stream_type"] == "balanced"
+    assert params["prefix_padding_ms"] == 300
+    assert params["silence_duration_ms"] == 500
+    phone = stt_stream.connection_params(8000)
+    assert phone["threshold"] == .2
+    assert phone["min_speech_duration_ms"] == 100
+    assert phone["stream_type"] == "fast"
+
+
+def test_browser_noise_profile_overrides_are_validated_and_sent(monkeypatch):
+    monkeypatch.setenv("BROWSER_VAD_THRESHOLD", "0.55")
+    monkeypatch.setenv("BROWSER_VAD_MIN_SPEECH_MS", "280")
+    async def run():
+        socket, connections = Socket(), []
+        connector(monkeypatch, socket, connections)
+        stream = stt_stream.StreamingSTT(lambda: None, lambda text: None,
+                                        sample_rate=16000, profile="browser")
+        await stream.start()
+        params = parse_qs(urlsplit(connections[0][0]).query)
+        assert params["threshold"] == ["0.55"]
+        assert params["min_speech_duration_ms"] == ["280"]
+        assert params["stream_type"] == ["balanced"]
+        await stream.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("key,value", [
+    ("BROWSER_VAD_THRESHOLD", "nan"), ("BROWSER_VAD_THRESHOLD", "1.1"),
+    ("BROWSER_VAD_MIN_SPEECH_MS", "-1"), ("BROWSER_STT_STREAM_TYPE", "unknown"),
+])
+def test_invalid_browser_noise_settings_fail_before_provider(monkeypatch, key, value):
+    monkeypatch.setenv(key, value)
+    with pytest.raises(ValueError):
+        stt_stream.connection_params(16000, profile="browser")
 
 
 def test_transient_connect_failure_retries_same_model(monkeypatch):
@@ -264,3 +316,39 @@ def test_stale_buffer_is_not_replayed_after_connection(monkeypatch):
         await stream.close()
 
     asyncio.run(run())
+
+
+def test_ack_timeout_retries_and_identifies_stage(monkeypatch, caplog):
+    async def run():
+        calls = []
+        stuck_socket, good_socket = Socket(), Socket()
+
+        async def stuck():
+            await asyncio.Event().wait()
+
+        stuck_socket.recv = stuck
+
+        @asynccontextmanager
+        async def connect(*args, **kwargs):
+            calls.append(kwargs)
+            yield stuck_socket if len(calls) == 1 else good_socket
+
+        monkeypatch.setattr(stt_stream, "connect", connect)
+        monkeypatch.setenv("SARVAM_STT_ACK_TIMEOUT", "0.01")
+        monkeypatch.setattr(stt_stream, "_INITIAL_BACKOFF", 0.001)
+        monkeypatch.setattr(stt_stream.random, "random", lambda: 0)
+        stream = stt_stream.StreamingSTT(lambda: None, lambda t: None)
+        await stream.start()
+        assert len(calls) == 2
+        assert "stage=session_ack" in caplog.text
+        assert "synthetic-not-a-real-key" not in caplog.text
+        await stream.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("value", ["0", "nan", "inf", "121"])
+def test_start_timeout_is_bounded(monkeypatch, value):
+    monkeypatch.setenv("SARVAM_STT_START_TIMEOUT", value)
+    with pytest.raises(ValueError):
+        stt_stream.StreamingSTT(lambda: None, lambda t: None)

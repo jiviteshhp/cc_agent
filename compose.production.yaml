@@ -1,0 +1,71 @@
+services:
+  app:
+    image: cc-agent-app:latest
+    # Trust only Caddy's fixed address on the private deployment network.
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "172.30.80.2", "--timeout-graceful-shutdown", "30", "--no-access-log", "--log-level", "warning"]
+    environment:
+      WEB_HOST: ${WEB_HOST:?Set WEB_HOST to the browser DNS hostname}
+      SARVAM_STT_MODEL: saaras:v4
+    networks:
+      web:
+        ipv4_address: 172.30.80.3
+  phone:
+    image: cc-agent-app:latest
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    command: ["uvicorn", "main:phone_app", "--host", "0.0.0.0", "--port", "8002", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "172.30.80.2", "--timeout-graceful-shutdown", "30", "--no-access-log", "--log-level", "warning"]
+    environment:
+      SERVER_HOST: ${WEB_HOST:?Set WEB_HOST to the browser DNS hostname}
+      VOBIZ_WEBHOOK_SECRET: ${VOBIZ_WEBHOOK_SECRET:?Set a random Vobiz webhook secret of at least 32 characters}
+      SARVAM_STT_MODEL: saaras:v4
+    volumes:
+      - app-data:/data
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/healthz', timeout=2)"]
+    networks:
+      web:
+        ipv4_address: 172.30.80.4
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      WEB_HOST: ${WEB_HOST:?Set WEB_HOST to the browser DNS hostname}
+      DEMO_PASSWORD_HASH: ${DEMO_PASSWORD_HASH:?Set a bcrypt hash using caddy hash-password}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+      phone:
+        condition: service_healthy
+    networks:
+      web:
+        ipv4_address: 172.30.80.2
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  web:
+    ipam:
+      config:
+        - subnet: 172.30.80.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:

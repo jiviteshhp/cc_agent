@@ -10,8 +10,9 @@ why in concise terms, what evidence supports it, and any unresolved limitations.
 Mark superseded decisions explicitly. Do not store secrets, patient data, or
 private internal reasoning; use concise technical rationale and observed facts.
 
-The current focus is local-only development with one LLM, dependable voice
-interaction, and mixed mono recordings. Deployment is deferred by the user.
+The current focus is the doctor portal with one LLM, dependable voice
+interaction, and mixed mono recordings. The user authorized AWS deployment and
+GitHub preservation on 2026-10-30; keep prior versions and all runtime records.
 Founder login and call on/off controls have been removed at the user's request.
 Keep the PR minimal. Explain unrelated cleanup candidates and obtain permission
 before deleting them. Tunnel only the phone app, never the local website.

@@ -33,6 +33,7 @@ def test_answer_returns_vobiz_bidirectional_stream(monkeypatch, synthetic_scenar
     assert response.media_type == "application/xml"
     assert 'bidirectional="true"' in xml
     assert 'keepCallAlive="true"' in xml
+    assert xml.index('<Hangup/>') > xml.index('</Stream>')
     assert 'noiseCancellation' not in xml  # even with obsolete env vars present
     assert 'audioTrack="inbound"' in xml
     assert 'contentType="audio/x-l16;rate=8000"' in xml
@@ -41,7 +42,7 @@ def test_answer_returns_vobiz_bidirectional_stream(monkeypatch, synthetic_scenar
 
 
 def transport_agent():
-    return Mock(session_id="SYNTH-FORMAT", stream_id=None,
+    return Mock(session_id="SYNTH-FORMAT", stream_id=None, input_rate=8000,
                 ws=Mock(close=AsyncMock()), on_audio=AsyncMock())
 
 

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Optha · Doctor's portal</title><link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/doctor/assets/doctor.css">
+</head>
+<body>
+<header class="app-header">
+  <a class="brand" href="/doctor" aria-label="Optha doctor's portal"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M3 20Q20 2 37 20Q20 38 3 20Z"/><circle cx="20" cy="20" r="6"/></svg><span>optha</span></a>
+  <span class="workspace-label">Doctor’s portal</span>
+</header>
+<div class="navigation-wrap"><nav class="tabs" role="tablist" aria-label="Patient care">
+  <button id="tab-live" role="tab" aria-selected="true" aria-controls="panel-live" tabindex="0" data-tab="live"><span class="tab-index">01</span>Live call<span id="live-dot" class="live-dot" hidden></span></button>
+  <button id="tab-reports" role="tab" aria-selected="false" aria-controls="panel-reports" tabindex="-1" data-tab="reports"><span class="tab-index">02</span>Reports</button>
+  <button id="tab-aftercare" role="tab" aria-selected="false" aria-controls="panel-aftercare" tabindex="-1" data-tab="aftercare"><span class="tab-index">03</span>Aftercare<span id="review-count" class="tab-count" hidden>1</span></button>
+</nav><span id="connection-label" class="connection-label">Telephone intake</span></div>
+<main>
+  <p id="error-banner" class="error-banner" role="alert" hidden></p>
+  <section id="panel-live" role="tabpanel" aria-labelledby="tab-live">
+    <div class="page-heading"><div><h1>Live call</h1><p>From the patient’s words to a clear history.</p></div><div class="call-picker"><label for="call-select" class="sr-only">Choose a telephone call</label><select id="call-select" hidden></select><span id="call-state" role="status" class="status neutral">Waiting for a call</span></div></div>
+    <div class="live-patient" id="live-patient" hidden><div><strong id="caller-name">Incoming caller</strong><span id="caller-detail"></span></div><span id="call-elapsed"></span></div>
+    <div class="live-grid">
+      <section class="surface conversation-card" aria-labelledby="conversation-title"><div class="section-heading"><h2 id="conversation-title">Conversation</h2><span id="transcript-label" class="quiet">Telephone</span></div>
+        <div id="conversation" class="conversation"><div class="waiting-state"><div class="phone-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3H3c-1 10 8 19 18 18v-4l-5-2-2 2a16 16 0 01-7-7l2-2z"/></svg></div><h3>Ready for the next call</h3><p>The conversation will appear here when a patient calls the connected phone number.</p></div></div>
+        <div class="conversation-footer"><span id="transcript-state">No active telephone call</span><button id="live-details" class="text-button" hidden>Call details ↗</button></div>
+      </section>
+      <section class="surface extraction-card" aria-labelledby="extraction-title"><div class="section-heading"><h2 id="extraction-title">History taking shape</h2><span id="extraction-state" role="status" class="status subtle">Draft</span></div><p class="section-description">Updates as the patient speaks.</p><div id="live-fields" class="fields"><div class="empty-fields"><span class="line-mark" aria-hidden="true"></span><p>Reported details will appear here.</p><small>Every supported detail links to the patient’s words.</small></div></div><p id="extraction-message" class="review-note">For clinician review. This is not a diagnosis.</p><a id="live-pdf" class="button secondary" href="#" target="_blank" rel="noopener" hidden>Open completed report ↗</a></section>
+    </div>
+  </section>
+  <section id="panel-reports" role="tabpanel" aria-labelledby="tab-reports" hidden>
+    <div class="page-heading"><div><h1>History report</h1><p>The report, with its source one touch away.</p></div><div class="heading-actions"><button id="open-report-pdf" class="button secondary">View PDF</button><a id="download-report" class="button primary" href="#" download>Download PDF</a></div></div>
+    <div class="patient-strip"><div><h2 id="report-patient">Loading report…</h2><p id="report-meta"></p></div><button class="text-button" data-record-details>Record details ↗</button></div>
+    <div class="report-grid">
+      <section class="surface history-card"><div class="section-heading"><h2>Patient-reported history</h2><span class="quiet">Source linked</span></div><div id="report-fields" class="fields"></div><p class="field-help">Hover or select a detail to see the patient’s exact words.</p></section>
+      <aside class="surface visit-card"><div class="section-heading"><h2>Before consultation</h2><span class="document-icon" aria-hidden="true">↗</span></div><p class="section-description">A simple route through the hospital.</p><ol id="visit-route" class="visit-route"></ol><p id="route-note" class="route-note"></p><a id="visit-pdf" class="button secondary full" href="#" target="_blank" rel="noopener">Open / print visit slip ↗</a><details class="subtle-details" id="routing-details"><summary>Edit room numbers</summary><form id="routing-form"><div class="room-inputs"><label>Vision check<input id="vision-room" name="vision_room" maxlength="32" required></label><label>NCT<input id="nct-room" name="nct_room" maxlength="32" required></label></div><button class="button secondary" type="submit">Save rooms</button><p id="routing-feedback" class="quiet" role="status"></p></form></details></aside>
+    </div>
+  </section>
+  <section id="panel-aftercare" role="tabpanel" aria-labelledby="tab-aftercare" hidden>
+    <div class="page-heading"><div><h1>Aftercare</h1><p>Patient-reported changes, ready for the care team.</p></div><button class="text-button" data-record-details>Record details ↗</button></div>
+    <div class="patient-strip"><div><h2 id="aftercare-patient">Loading recovery record…</h2><p id="procedure-summary"></p></div><span id="postoperative-day" class="status subtle"></span></div>
+    <div class="aftercare-grid"><section class="surface followup-card"><div class="section-heading"><h2>Follow-up history</h2><span class="quiet">Patient reports</span></div><div id="followup-history"></div><p class="field-help">Phone reports do not replace the scheduled clinical review.</p></section><aside id="handover-card" class="surface handover-card"><div class="section-heading"><span class="notification-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 00-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10M10 22h4"/></svg>Care-team notification</span></div><div id="handover-content"></div></aside></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="source-dialog" class="source-dialog" aria-labelledby="source-title"><div class="dialog-heading"><div><p class="eyebrow">Supporting source</p><h2 id="source-title">The patient’s words</h2></div><button class="close-button" data-close aria-label="Close source">×</button></div><div id="source-body" class="dialog-body"></div></dialog>
+<dialog id="pdf-dialog" class="pdf-dialog" aria-labelledby="pdf-title"><div class="dialog-heading"><div><p class="eyebrow">Report & source</p><h2 id="pdf-title">History report</h2></div><div class="heading-actions"><a id="pdf-open" class="button secondary" href="#" target="_blank" rel="noopener">Open / print ↗</a><button class="close-button" data-close aria-label="Close PDF">×</button></div></div><div class="pdf-layout"><iframe id="pdf-frame" title="Patient history PDF"></iframe><div class="pdf-transcript"><h3>Source conversation</h3><div id="pdf-source"></div></div></div></dialog>
+<dialog id="record-dialog" aria-labelledby="record-title"><div class="dialog-heading"><h2 id="record-title">Record details</h2><button class="close-button" data-close aria-label="Close record details">×</button></div><div id="record-body" class="dialog-body"></div></dialog>
+<dialog id="acknowledge-dialog" aria-labelledby="acknowledge-title"><form id="acknowledge-form"><div class="dialog-heading"><div><p class="eyebrow">Human review</p><h2 id="acknowledge-title">Acknowledge this review</h2></div><button type="button" class="close-button" data-close aria-label="Cancel acknowledgement">×</button></div><div class="dialog-body"><p>Your acknowledgement records who has seen the request. Clinical resolution remains separate.</p><label class="staff-label" for="staff-name">Your name</label><input id="staff-name" autocomplete="name" maxlength="100" placeholder="Name for this staff action" required><p class="quiet">Local staff attribution; this is not an authenticated login.</p><p id="acknowledge-error" class="inline-error" role="alert" hidden></p><button id="confirm-acknowledge" class="button primary full" type="submit">Acknowledge review</button></div></form></dialog>
+<script type="module" src="/doctor/assets/doctor.js"></script>
+</body>
+</html>

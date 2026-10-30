@@ -102,3 +102,39 @@ def find_session_by_phone(phone):
     pool = registered or matches
     pool.sort(key=lambda m: m.get("created_at") or "", reverse=True)
     return pool[0]
+
+
+def new_phone_session(raw_phone):
+    """New call identity every time; only copy explicitly registered demographics."""
+    import local_calls
+    phone = local_calls.normalize_phone(raw_phone)
+    ensure_dir()
+    registered = []
+    if phone:
+        for fn in os.listdir(SESSIONS_DIR):
+            if not fn.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(SESSIONS_DIR, fn), encoding="utf-8") as f:
+                    previous = json.load(f)
+                if (previous.get("status") == "registered"
+                        and local_calls.normalize_phone(previous.get("phone")) == phone):
+                    registered.append(previous)
+            except (OSError, ValueError):
+                continue
+    previous = max(registered, key=lambda s: s.get("created_at") or "", default={})
+    age = previous.get("age")
+    if isinstance(age, str) and age.isdigit():
+        age = int(age)
+    record = local_calls.create_phone(raw_phone, previous.get("name") or "Unknown", age)
+    data = {f: None for f in FIELDS}
+    data.update(session_id=record["session_id"], name=record["name"], age=record["age"],
+                uhid=previous.get("uhid"), phone=phone, created_at=record["created_at"],
+                status="in_call", source="phone", call_label=record["label"],
+                call_index=record["call_index"], local_call_number=record["number"])
+    try:
+        save_session(data)
+    except OSError:
+        local_calls.set_status(record["number"], "save_failed")
+        raise
+    return data

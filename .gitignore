@@ -29,6 +29,8 @@ state/
 
 # Audio, reports, exports, and archives
 *.wav
+!fixtures/recovery/audio/*.wav
+!fixtures/care/audio/*.wav
 *.mp3
 *.m4a
 *.flac

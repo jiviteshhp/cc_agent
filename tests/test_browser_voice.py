@@ -35,6 +35,94 @@ def test_browser_uses_wideband_rates_and_short_paced_chunks():
     asyncio.run(run())
 
 
+def test_vad_only_noise_keeps_browser_playback_and_history_intact():
+    async def run():
+        agent = new_agent()
+        agent.state = "speaking"
+        for _ in range(3):
+            agent._on_speech_start()
+            agent._on_partial("  ")
+            agent._on_speech_end()
+        await asyncio.sleep(0)
+        assert not agent._interrupt
+        assert not agent._user_speaking
+        assert agent.history == [] and agent._pending == []
+        assert agent.ws.events == []
+        await agent._play(b"\0\0" * 960, tail=False)
+        assert any(e["type"] == "audio" for e in agent.ws.events)
+        await agent._close_stream()
+    asyncio.run(run())
+
+
+def test_browser_partial_without_vad_clears_queued_audio_once():
+    async def run():
+        agent = new_agent()
+        agent.state = "speaking"
+        agent._generation_task = asyncio.create_task(asyncio.sleep(10))
+        await agent._play(b"\0\0" * 3840, tail=False)
+        agent._on_partial("नहीं")
+        assert not agent._interrupt
+        # Missing VAD: repeated stable recognition must span the confirmation time.
+        agent._speech_gate.anchor_at -= .3
+        agent._on_partial("नहीं")
+        await asyncio.gather(agent._generation_task, return_exceptions=True)
+        await agent._clear_task
+        await asyncio.sleep(0)
+        assert agent._audio_deadline == 0
+        assert sum(e["type"] == "clear" for e in agent.ws.events) == 1
+        assert sum(e["type"] == "interrupt" for e in agent.ws.events) == 1
+        before = len(agent.ws.events)
+        await agent._play(b"\0\0" * 960, tail=False)
+        assert not any(e["type"] == "audio" for e in agent.ws.events[before:])
+        assert agent.history == [] and agent._pending == []
+        await agent._close_stream()
+    asyncio.run(run())
+
+
+def test_browser_final_without_partial_still_interrupts(monkeypatch):
+    async def run():
+        agent = new_agent()
+        agent.state = "speaking"
+        agent.turn_debounce = 0
+        agent._consume_user = AsyncMock()
+        agent._speech_gate.start(playground.time.monotonic() - .3, protected=True)
+        await agent._handle_stream_text("नहीं")
+        await agent._clear_task
+        assert agent._interrupt
+        agent._consume_user.assert_awaited_once_with("नहीं")
+        await agent._close_stream()
+    asyncio.run(run())
+
+
+def test_browser_playback_bounds_queue_and_does_not_accumulate_sleep_drift(monkeypatch):
+    async def run():
+        clock = SimpleNamespace(now=100.0)
+        monkeypatch.setattr(playground, "time", SimpleNamespace(monotonic=lambda: clock.now))
+        async def delayed_sleep(seconds):
+            clock.now += seconds + .005  # event-loop wake-up jitter
+        monkeypatch.setattr(asyncio, "sleep", delayed_sleep)
+        agent = new_agent()
+        sent = []
+        async def send(pcm):
+            sent.append((clock.now, len(pcm)))
+            clock.now += .003  # socket-send overhead
+        agent._send_audio = send
+        # Provider frames cross _play boundaries but share one playback clock.
+        for _ in range(10):
+            await agent._play(b"\0\0" * 4800, tail=False)
+        duration = 0
+        for when, size in sent:
+            duration += size / 48000
+            assert duration - (when - 100) <= .201
+        assert len(sent) == 50
+        assert agent._audio_deadline == pytest.approx(102)
+        await agent._drain_audio()
+        assert clock.now == pytest.approx(102.555)
+        await agent._clear_audio()
+        assert agent._audio_deadline == 0
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("stage", ["llm", "tts", "greeting"])
 def test_browser_barge_in_closes_generation_and_stream(monkeypatch, stage):
     async def run():
@@ -66,6 +154,13 @@ def test_browser_barge_in_closes_generation_and_stream(monkeypatch, stage):
         await asyncio.wait_for(started.wait(), 1)
         before = len(agent.ws.events)
         agent._on_speech_start()
+        await asyncio.sleep(0)
+        assert not task.done() and not agent._interrupt
+        agent._on_partial("रुकिए")
+        assert not agent._interrupt
+        agent._speech_gate.started -= .3
+        agent._speech_gate.anchor_at -= .2
+        agent._on_partial("रुकिए")
         await asyncio.wait_for(task, .5)
         assert cleaned.is_set()
         assert any(e.get("type") == "clear" for e in agent.ws.events[before:])
@@ -95,9 +190,10 @@ def test_partial_only_is_not_extracted_and_late_final_is_kept(monkeypatch):
         agent = new_agent()
         agent.ready = True
         agent._stt_stream = SimpleNamespace(flush=AsyncMock(), close=AsyncMock())
+        agent._speech_gate.start(playground.time.monotonic() - .3)
         agent._on_partial("tentative synthetic answer")
         seen = []
-        async def extract(history):
+        async def extract(history, **kwargs):
             seen.extend(history)
             return {"laterality": "Left"}
         monkeypatch.setattr(playground.llm, "extract", extract)
@@ -166,17 +262,43 @@ class TTSWebSocket:
         return await self.messages.get()
 
 
-def test_raw_pcm_protocol_alignment_and_single_flush(monkeypatch):
+@pytest.mark.parametrize("settings,expected", [({}, 0.6), ({"temperature": 0.8}, 0.8)])
+def test_raw_pcm_protocol_alignment_and_single_flush(monkeypatch, settings, expected):
     async def run():
         audio = lambda raw: {"type": "audio", "data": {"audio": base64.b64encode(raw).decode(), "content_type": "audio/pcm"}}
         ws = TTSWebSocket([audio(b"\1\2\3"), audio(b"\4"), {"type": "event", "data": {"event_type": "final"}}])
         monkeypatch.setenv("SARVAM_API_KEY", "synthetic-not-a-key")
         monkeypatch.setattr(browser_voice, "connect", lambda *args, **kwargs: ws)
-        result = b"".join([chunk async for chunk in browser_voice.stream_speech(browser_voice.one_text("Synthetic"))])
+        result = b"".join([chunk async for chunk in browser_voice.stream_speech(browser_voice.one_text("Synthetic"), **settings)])
         assert result == b"\1\2\3\4" and ws.closed
         assert ws.sent[0]["data"]["output_audio_codec"] == "linear16"
         assert ws.sent[0]["data"]["speech_sample_rate"] == 24000
+        assert ws.sent[0]["data"]["temperature"] == expected
         assert [msg["type"] for msg in ws.sent] == ["config", "text", "flush"]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("temperature", [0, 1.1, None, True, "0.6", float("nan"), float("inf")])
+def test_invalid_expressiveness_rejects_start(monkeypatch, temperature):
+    async def run():
+        agent = new_agent()
+        agent.start_background = lambda: pytest.fail("Invalid settings must not start a call")
+        await playground._on_text(agent, json.dumps({"event": "start", "temperature": temperature}))
+        assert not agent.started
+        assert any(e.get("type") == "error" for e in agent.ws.events)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("settings,expected", [({}, 0.6), ({"temperature": 0.8}, 0.8)])
+def test_expressiveness_is_snapshotted_at_call_start(monkeypatch, settings, expected):
+    monkeypatch.setattr(playground, "configuration", lambda: {"voice_ready": True})
+    async def run():
+        agent = new_agent()
+        agent.start_background = lambda: None
+        await playground._on_text(agent, json.dumps({"event": "start", **settings}))
+        assert agent.started and agent.temperature == expected
+        await playground._on_text(agent, '{"event":"start","temperature":0.2}')
+        assert agent.temperature == expected
     asyncio.run(run())
 
 
@@ -218,7 +340,9 @@ def test_end_to_end_browser_socket_with_synthetic_providers(monkeypatch):
     class Listener:
         def __init__(self, on_transcript, sample_rate, **kwargs):
             assert sample_rate == 16000
+            assert kwargs["profile"] == "browser"
             self.final = on_transcript
+            self.speech_start = kwargs["on_speech_start"]
             self.closed = False
             self.frames = []
             listeners.append(self)
@@ -227,6 +351,8 @@ def test_end_to_end_browser_socket_with_synthetic_providers(monkeypatch):
         async def send(self, data):
             self.frames.append(data)
         async def flush(self):
+            self.speech_start()
+            await asyncio.sleep(.46)
             self.final("synthetic final patient answer")
         async def close(self):
             self.closed = True
@@ -234,7 +360,7 @@ def test_end_to_end_browser_socket_with_synthetic_providers(monkeypatch):
         async with aclosing(chunks):
             async for text in chunks:
                 yield b"\0\0" * 960
-    async def extract(history):
+    async def extract(history, **kwargs):
         histories.extend(history)
         return {"laterality": "Left"}
     monkeypatch.setattr(playground, "configuration", lambda: {"voice_ready": True, "text_ready": True})

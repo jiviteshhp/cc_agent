@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - app-data:/data
+    stop_grace_period: 45s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app-data:

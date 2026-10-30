@@ -1,0 +1,221 @@
+{
+  "stable": {
+    "turns": [
+      {
+        "id": "stable-patient-1",
+        "role": "patient",
+        "text": "दर्द कल जैसा ही हल्का है। दिखना भी कल जैसा है, कोई बदलाव नहीं है।",
+        "subtitle": "The pain is still mild, like yesterday. Seeing is also the same; no change.",
+        "audio": null
+      }
+    ],
+    "extraction": {
+      "observations": [
+        {
+          "id": "stable-pain",
+          "symptom": "pain",
+          "change": "same",
+          "description": "Patient reports pain unchanged from yesterday",
+          "evidence": [
+            {
+              "turn_id": "stable-patient-1",
+              "quote": "दर्द कल जैसा ही हल्का है।"
+            }
+          ],
+          "corrects": null
+        },
+        {
+          "id": "stable-vision",
+          "symptom": "vision",
+          "change": "same",
+          "description": "Patient reports seeing unchanged from yesterday",
+          "evidence": [
+            {
+              "turn_id": "stable-patient-1",
+              "quote": "दिखना भी कल जैसा है, कोई बदलाव नहीं है।"
+            }
+          ],
+          "corrects": null
+        }
+      ],
+      "uncertainties": []
+    }
+  },
+  "worsening": {
+    "turns": [
+      {
+        "id": "worsening-patient-1",
+        "role": "patient",
+        "text": "कल हल्का दर्द था, आज दर्द बढ़ गया है। और कल से ज़्यादा धुंधला दिख रहा है।",
+        "subtitle": "Yesterday the pain was mild; today it has increased. Seeing is more blurred than yesterday.",
+        "audio": null
+      }
+    ],
+    "extraction": {
+      "observations": [
+        {
+          "id": "worsening-pain",
+          "symptom": "pain",
+          "change": "worse",
+          "description": "Patient reports increased pain compared with yesterday",
+          "evidence": [
+            {
+              "turn_id": "worsening-patient-1",
+              "quote": "कल हल्का दर्द था, आज दर्द बढ़ गया है।"
+            }
+          ],
+          "corrects": null
+        },
+        {
+          "id": "worsening-vision",
+          "symptom": "vision",
+          "change": "worse",
+          "description": "Patient reports more blurred seeing compared with yesterday",
+          "evidence": [
+            {
+              "turn_id": "worsening-patient-1",
+              "quote": "और कल से ज़्यादा धुंधला दिख रहा है।"
+            }
+          ],
+          "corrects": null
+        }
+      ],
+      "uncertainties": []
+    }
+  },
+  "missing": {
+    "turns": [],
+    "extraction": {
+      "observations": [],
+      "uncertainties": [
+        "No patient answer captured; silence is not a report of normal recovery."
+      ]
+    }
+  },
+  "contradictory": {
+    "turns": [
+      {
+        "id": "contradictory-patient-1",
+        "role": "patient",
+        "text": "दर्द कल जैसा है। दिखना भी कल जैसा है।",
+        "subtitle": "Pain and seeing are the same as yesterday.",
+        "audio": null
+      },
+      {
+        "id": "contradictory-patient-2",
+        "role": "patient",
+        "text": "आज दर्द ज़्यादा है।",
+        "subtitle": "The pain is worse today.",
+        "audio": null
+      }
+    ],
+    "extraction": {
+      "observations": [
+        {
+          "id": "contradictory-pain-1",
+          "symptom": "pain",
+          "change": "same",
+          "description": "Patient initially reports unchanged pain",
+          "evidence": [
+            {
+              "turn_id": "contradictory-patient-1",
+              "quote": "दर्द कल जैसा है।"
+            }
+          ],
+          "corrects": null
+        },
+        {
+          "id": "contradictory-vision",
+          "symptom": "vision",
+          "change": "same",
+          "description": "Patient reports unchanged seeing",
+          "evidence": [
+            {
+              "turn_id": "contradictory-patient-1",
+              "quote": "दिखना भी कल जैसा है।"
+            }
+          ],
+          "corrects": null
+        },
+        {
+          "id": "contradictory-pain-2",
+          "symptom": "pain",
+          "change": "worse",
+          "description": "Patient also reports increased pain; contradiction unresolved",
+          "evidence": [
+            {
+              "turn_id": "contradictory-patient-2",
+              "quote": "आज दर्द ज़्यादा है।"
+            }
+          ],
+          "corrects": null
+        }
+      ],
+      "uncertainties": [
+        "Pain statements conflict; the patient did not explicitly correct the earlier statement."
+      ]
+    }
+  },
+  "correction": {
+    "turns": [
+      {
+        "id": "correction-patient-1",
+        "role": "patient",
+        "text": "दर्द कल जैसा है। दिखना भी कल जैसा है।",
+        "subtitle": "Pain and seeing are the same as yesterday.",
+        "audio": null
+      },
+      {
+        "id": "correction-patient-2",
+        "role": "patient",
+        "text": "नहीं, दर्द के बारे में सुधार करूँगी। आज दर्द कल से ज़्यादा है।",
+        "subtitle": "Let me correct what I said about pain. Today it is worse than yesterday.",
+        "audio": null
+      }
+    ],
+    "extraction": {
+      "observations": [
+        {
+          "id": "correction-pain-1",
+          "symptom": "pain",
+          "change": "same",
+          "description": "Patient initially reports unchanged pain",
+          "evidence": [
+            {
+              "turn_id": "correction-patient-1",
+              "quote": "दर्द कल जैसा है।"
+            }
+          ],
+          "corrects": null
+        },
+        {
+          "id": "correction-vision",
+          "symptom": "vision",
+          "change": "same",
+          "description": "Patient reports unchanged seeing",
+          "evidence": [
+            {
+              "turn_id": "correction-patient-1",
+              "quote": "दिखना भी कल जैसा है।"
+            }
+          ],
+          "corrects": null
+        },
+        {
+          "id": "correction-pain-2",
+          "symptom": "pain",
+          "change": "worse",
+          "description": "Patient explicitly corrects pain report: worse than yesterday",
+          "evidence": [
+            {
+              "turn_id": "correction-patient-2",
+              "quote": "नहीं, दर्द के बारे में सुधार करूँगी। आज दर्द कल से ज़्यादा है।"
+            }
+          ],
+          "corrects": "correction-pain-1"
+        }
+      ],
+      "uncertainties": []
+    }
+  }
+}

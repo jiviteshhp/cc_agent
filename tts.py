@@ -1,8 +1,6 @@
-# Existing phone TTS adapter: Bulbul v3 to 8 kHz mono PCM for Vobiz.
-# Retains the previously tested streaming MP3 -> ffmpeg decoder and REST fallback.
-# Sarvam now documents raw PCM too; the browser uses browser_voice.py instead,
-# streaming 24 kHz linear16 directly without a decoder subprocess.
-# Fall back only before any audio is emitted, never replay a partial sentence.
+# Phone TTS: direct 8 kHz PCM for the negotiated Vobiz format.
+# Live speech shares the validated browser transport; no retry/fallback.
+# The legacy one-shot synth helper remains for existing offline callers.
 
 import asyncio
 import base64
@@ -63,87 +61,17 @@ async def synth(text):
     return pcm
 
 
-async def synth_stream(text):
-    # Yields PCM chunks as they're decoded, so playback can start on the first
-    # chunk instead of waiting for the whole clip. Before any audio is emitted,
-    # a failure can safely fall back to REST synthesis of the whole sentence.
-    text = (text or "").strip()
-    if not text:
-        return
-    emitted = False
-    try:
-        async with aclosing(_synth_stream_ws(text)) as stream:
-            async for chunk in stream:
-                emitted = True
-                yield chunk
-    except Exception as e:
-        if emitted:
-            # Replaying the whole sentence after partial playback duplicates speech.
-            raise
-        print(f"[tts] synth_stream failed ({type(e).__name__}: {e}); falling back to REST synth")
-        pcm = await synth(text)
-        if pcm:
+async def stream_speech(chunks):
+    """One direct-PCM stream per reply; no retry or replay of partial audio."""
+    from browser_voice import stream_speech as pcm_stream
+    async with aclosing(pcm_stream(chunks, speaker=_STREAM_SPEAKER,
+                                  sample_rate=SAMPLE_RATE)) as audio:
+        async for pcm in audio:
             yield pcm
 
 
-async def _synth_stream_ws(text):
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        # Low-latency decode flags -- ffmpeg's defaults probe/buffer the input
-        # before emitting output, which measured ~0.9s of pure decode latency on
-        # top of Sarvam's own time-to-first-chunk (live-tested 2026-07-23). These
-        # cut that to ~0.05s: skip format analysis (we already know it's MP3),
-        # and disable internal buffering.
-        "-analyzeduration", "0", "-probesize", "32",
-        "-fflags", "nobuffer", "-flags", "low_delay",
-        "-f", "mp3", "-i", "pipe:0",
-        "-f", "s16le", "-ar", str(SAMPLE_RATE), "-ac", "1", "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
-    feeder = asyncio.create_task(_feed_ffmpeg(proc, text))
-    try:
-        while True:
-            chunk = await proc.stdout.read(_FFMPEG_READ_SIZE)
-            if not chunk:
-                break
-            yield chunk
-        await feeder   # surface a feeder-side exception (e.g. WS error) if stdout closed because of it
-    finally:
-        if not feeder.done():
-            feeder.cancel()
-        with suppress(asyncio.CancelledError, Exception):
-            await feeder
-        if proc.returncode is None:
-            proc.kill()
-        await proc.wait()
-
-
-async def _feed_ffmpeg(proc, text):
-    # Connect to Sarvam's streaming TTS, write each MP3 chunk to ffmpeg's stdin
-    # as it arrives, and close stdin once the 'final' completion event confirms
-    # nothing more is coming (so ffmpeg flushes and its stdout hits EOF).
-    try:
-        async with _sarvam_client().text_to_speech_streaming.connect(
-                model=_STREAM_MODEL, send_completion_event="true") as ws:
-            await ws.configure(
-                target_language_code="hi-IN",
-                speaker=_STREAM_SPEAKER,
-                speech_sample_rate=SAMPLE_RATE,
-                output_audio_codec="mp3",
-            )
-            await ws.convert(text)
-            await ws.flush()
-            while True:
-                msg = await asyncio.wait_for(ws.recv(), timeout=_CHUNK_TIMEOUT)
-                mtype = getattr(msg, "type", None)
-                if mtype == "audio":
-                    proc.stdin.write(base64.b64decode(msg.data.audio))
-                    await proc.stdin.drain()
-                elif mtype == "error":
-                    raise RuntimeError(f"sarvam tts stream error: {msg.data}")
-                elif mtype == "event" and getattr(msg.data, "event_type", "") == "final":
-                    break
-    finally:
-        proc.stdin.close()
+async def synth_stream(text):
+    from browser_voice import one_text
+    async with aclosing(stream_speech(one_text(text))) as audio:
+        async for pcm in audio:
+            yield pcm

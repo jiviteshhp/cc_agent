@@ -1,0 +1,34 @@
+{
+  "intake-a1": {
+    "text": "आपको आँख में क्या परेशानी है?",
+    "file": "intake-a1.wav",
+    "duration": 2.927755102040816,
+    "sha256": "9e74027b350033458bbadd9c90dbcc125c6fb0e14256255879b1f4a9d4831a61",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "intake-p1": {
+    "text": "दाईं आँख से धुंधला दिखता है।",
+    "file": "intake-p1.wav",
+    "duration": 2.504625850340136,
+    "sha256": "9e723db057cf0401939f9b8296e4284b36e3cc4631c36457824cee1ba985add1",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "intake-a2": {
+    "text": "यह परेशानी कब से है?",
+    "file": "intake-a2.wav",
+    "duration": 2.1875736961451246,
+    "sha256": "a2ed587a1773fade361a2b701e9cc201628eb3d33a235c5e6b274cc78fcd2237",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "intake-p2": {
+    "text": "लगभग छह महीने से है। पढ़ने में दिक्कत होती है।",
+    "file": "intake-p2.wav",
+    "duration": 4.793061224489796,
+    "sha256": "57dbe5e2080e85026d067dfcc3d8e954d67422840f60c48c1d9e61e1611afe1f",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  }
+}

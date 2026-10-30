@@ -1,6 +1,5 @@
-# Audio helpers. Vobiz sends/receives 8kHz 16-bit signed PCM (L16, mono),
-# so no mulaw decoding is needed. We only pack/unpack WAV, resample if a
-# source rate differs, and compute frame RMS for VAD.
+# Audio helpers. Phone input/recording use 8 kHz signed PCM (L16, mono).
+# Native Gemini playback uses 24 kHz; its recording is downsampled separately.
 
 import io
 import wave
@@ -48,3 +47,51 @@ def frame_rms(frame):
         return 0.0
     x = np.frombuffer(frame, dtype=np.int16).astype(np.float64)
     return float(np.sqrt(np.mean(x * x)))
+
+
+class PCMTo8:
+    """Streaming antialiased 16/24 → 8 kHz conversion for the phone recording.
+
+    Preserve filter history and decimation phase across arbitrary PCM chunks.
+    The low-pass contributes 2 ms group delay, not per-chunk padding.
+    Native playback goes to Vobiz at 24 kHz and does not use this conversion.
+    """
+    def __init__(self, source_rate=24000):
+        if source_rate not in (16000, 24000):
+            raise ValueError("Unsupported recording source rate")
+        self._factor = source_rate // 8000
+        self._history_length = source_rate // 250
+        taps = self._history_length + 1
+        offsets = np.arange(taps) - self._history_length // 2
+        cutoff = 3500 / source_rate
+        kernel = 2 * cutoff * np.sinc(2 * cutoff * offsets) * np.kaiser(taps, 8.6)
+        self._kernel = kernel / kernel.sum()
+        self._history = np.zeros(self._history_length)
+        self._samples = 0
+        self._flushed = False
+
+    def process(self, pcm):
+        if self._flushed:
+            raise ValueError("Recording resampler already flushed")
+        if len(pcm) % 2:
+            raise ValueError("Incomplete PCM sample")
+        if not pcm:
+            return b""
+        samples = np.frombuffer(pcm, dtype="<i2").astype(np.float64)
+        joined = np.concatenate((self._history, samples))
+        filtered = np.convolve(joined, self._kernel, mode="valid")
+        phase = (-self._samples) % self._factor
+        output = np.clip(np.rint(filtered[phase::self._factor]), -32768, 32767).astype("<i2")
+        self._samples += len(samples)
+        self._history = joined[-self._history_length:]
+        return output.tobytes()
+
+    def flush(self):
+        if self._flushed or not self._samples:
+            return b""
+        tail = self.process(b"\0\0" * self._history_length)
+        self._flushed = True
+        return tail
+
+
+PCM24To8 = PCMTo8

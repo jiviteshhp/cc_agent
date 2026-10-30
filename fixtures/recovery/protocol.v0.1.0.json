@@ -1,0 +1,60 @@
+{
+  "id": "symphony-illustrative-recovery",
+  "version": "0.1.0-demo",
+  "approval_status": "illustrative_only_not_clinically_approved",
+  "scope": "Synthetic cataract episode only. Not a medical protocol or instructions for real patients. Requires named clinical-owner review before clinical use.",
+  "questions": [
+    {
+      "id": "recovery-change",
+      "symptom": "pain_and_vision",
+      "hi": "कल आपने हल्का दर्द बताया था। आज दर्द कैसा है? और दिखने में कल से कोई बदलाव है?",
+      "en": "Yesterday you reported mild pain. How is the pain today, and has seeing changed since yesterday?"
+    }
+  ],
+  "messages": {
+    "review_requested": {
+      "hi": "आपकी बात में बदलाव या अधूरी जानकारी है। मैं सामान्य सवाल रोककर यह रिपोर्ट टीम की समीक्षा के लिए रख रही हूँ। अभी किसी सदस्य से बात या देखभाल की पुष्टि नहीं हुई है।",
+      "en": "I am pausing routine questions and placing this report in the local team review queue. Contact or care has not been confirmed."
+    },
+    "report_saved": {
+      "hi": "आज की आपकी बात दर्ज हो गई है। यह डॉक्टर की जाँच या ठीक होने की पुष्टि नहीं है। तय समीक्षा बनी रहेगी।",
+      "en": "Your report is saved. This is not clinical clearance; the scheduled review remains."
+    },
+    "transfer_failed": {
+      "hi": "टीम से फ़ोन पर संपर्क नहीं हो पाया है। समीक्षा का अनुरोध अभी लंबित है।",
+      "en": "Telephone contact was not established. The review request remains unresolved."
+    }
+  },
+  "rules": [
+    {
+      "id": "DEMO-CHANGE-01",
+      "label": "Patient reports worsening since previous report",
+      "condition": "Any validated pain or vision observation has change = worse",
+      "action": "Stop routine questionnaire; request local staff review",
+      "urgency": "Review requested; no clinical urgency classification assigned",
+      "predicate": "any_worsening"
+    },
+    {
+      "id": "DEMO-UNCERTAIN-02",
+      "label": "Missing, uncertain, contradictory or corrected report",
+      "condition": "Required symptom absent, unknown change, uncertainty, contradiction or explicit correction",
+      "action": "Keep ambiguity visible; request local staff review",
+      "urgency": "Review requested; no clinical urgency classification assigned",
+      "predicate": "any_uncertainty"
+    },
+    {
+      "id": "DEMO-EVIDENCE-03",
+      "label": "Extraction evidence cannot be verified",
+      "condition": "Referenced patient turn missing or exact quote does not match",
+      "action": "Exclude unsupported assertion from handover; request review of source",
+      "urgency": "Review requested; no clinical urgency classification assigned",
+      "predicate": "invalid_evidence"
+    }
+  ],
+  "required_symptoms": [
+    "pain",
+    "vision"
+  ],
+  "fallback_instructions": null,
+  "fallback_note": "No clinician-approved fallback instructions are available. Never claim successful care or delivery after failed transfer."
+}

@@ -55,7 +55,7 @@ def _pdf_path(session):
     return os.path.join(PDF_DIR, f"{seq:04d}_{phone}({count}).pdf")
 
 
-def generate(session, output_path=None):
+def generate(session, output_path=None, *, clinic_name=None):
     os.makedirs(PDF_DIR, exist_ok=True)
     path = output_path or _pdf_path(session)
     w, h = A5
@@ -69,8 +69,31 @@ def generate(session, output_path=None):
         c.setLineWidth(0.5)
         c.line(m, yy, w - m, yy)
 
+    def footer():
+        is_partial = session.get("status") == "partial"
+        c.setFillColor(colors.Color(0.75, 0.1, 0.1) if is_partial else GREY)
+        c.setFont("Helvetica-Bold" if is_partial else "Helvetica", 7)
+        phone_disp = re.sub(r"\D", "", session.get("phone") or "")[-10:] or "-"
+        partial_tag = " | PARTIAL RECORD — call dropped" if is_partial else ""
+        c.drawString(m, 12 * mm,
+                     f"AI-generated | Review required | {session['session_id']} | {phone_disp}{partial_tag}")
+
+    def ensure_space(height):
+        nonlocal y
+        if y - height >= 22 * mm:
+            return False
+        footer()
+        c.showPage()
+        y = h - m
+        c.setFillColor(GREY)
+        c.setFont("Helvetica", 8)
+        c.drawString(m, y, "CHIEF COMPLAINT RECORD — continued")
+        y -= 8 * mm
+        return True
+
     def block(label, value, value_font, value_size, line_gap):
         nonlocal y
+        ensure_space(4.5 * mm + line_gap)
         c.setFillColor(GREY)
         c.setFont("Helvetica", 7)
         c.drawString(m, y, label)
@@ -78,6 +101,13 @@ def generate(session, output_path=None):
         c.setFillColor(colors.black)
         c.setFont(value_font, value_size)
         for ln in _wrap(_fmt(value), value_font, value_size, inner):
+            if ensure_space(line_gap):
+                c.setFillColor(GREY)
+                c.setFont("Helvetica", 7)
+                c.drawString(m, y, label + " (continued)")
+                y -= 4.5 * mm
+            c.setFillColor(colors.black)
+            c.setFont(value_font, value_size)
             c.drawString(m, y, ln)
             y -= line_gap
         y -= 2 * mm
@@ -85,7 +115,7 @@ def generate(session, output_path=None):
     # Header
     c.setFillColor(colors.black)
     c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(w / 2, y, os.environ.get("CLINIC_NAME", "Clinic"))
+    c.drawCentredString(w / 2, y, clinic_name or os.environ.get("CLINIC_NAME", "Clinic"))
     y -= 6 * mm
     c.setFillColor(GREY)
     c.setFont("Helvetica", 8)
@@ -123,7 +153,13 @@ def generate(session, output_path=None):
     ]:
         block(label, session.get(key), "Helvetica", 11, 5 * mm)
 
+    for label, key in [("OTHER PATIENT-REPORTED DETAILS", "additional_details"),
+                       ("NEEDS CLARIFICATION", "uncertainties")]:
+        if session.get(key) and session[key] != "-":
+            block(label, session[key], "Helvetica", 11, 5 * mm)
+
     # Signature + footer
+    ensure_space(17 * mm)
     y -= 3 * mm
     hr(y)
     y -= 10 * mm
@@ -131,13 +167,7 @@ def generate(session, output_path=None):
     c.setFont("Helvetica", 9)
     c.drawString(m, y, "Doctor's signature & stamp: ____________________")
 
-    is_partial = session.get("status") == "partial"
-    c.setFillColor(colors.Color(0.75, 0.1, 0.1) if is_partial else GREY)
-    c.setFont("Helvetica-Bold" if is_partial else "Helvetica", 7)
-    phone_disp = re.sub(r"\D", "", session.get("phone") or "")[-10:] or "-"
-    partial_tag = " | PARTIAL RECORD — call dropped" if is_partial else ""
-    c.drawString(m, 12 * mm,
-                 f"AI-generated | Review required | {session['session_id']} | {phone_disp}{partial_tag}")
+    footer()
 
     c.showPage()
     c.save()

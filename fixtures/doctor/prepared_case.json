@@ -1,0 +1,61 @@
+{
+  "id": "doctor-prepared-case-001",
+  "provenance": "Prepared case",
+  "patient": {"id": "OP-1042", "name": "Meera Sharma", "age": 64, "language": "Hindi / Hinglish", "identity_basis": "Explicit prepared case selection; unrelated incoming calls are separate records."},
+  "report": {
+    "id": "prepared",
+    "date": "2026-10-26",
+    "fields": [
+      {"id": "chief_complaint", "label": "Chief complaint", "value": "Blurred seeing in the right eye", "evidence": [{"turn_id": "history-p1", "quote": "दाईं आँख से धुंधला दिखता है।"}]},
+      {"id": "laterality", "label": "Affected eye", "value": "Right", "evidence": [{"turn_id": "history-p1", "quote": "दाईं आँख से"}]},
+      {"id": "duration", "label": "Duration", "value": "Six months", "evidence": [{"turn_id": "history-p2", "quote": "लगभग छह महीने से है।"}]},
+      {"id": "additional_details", "label": "Daily activities", "value": "Reading has become difficult", "evidence": [{"turn_id": "history-p2", "quote": "पढ़ने में दिक्कत होती है।"}]},
+      {"id": "prior_treatment", "label": "Prior treatment", "value": "No treatment reported for this complaint", "evidence": [{"turn_id": "history-p3", "quote": "इसके लिए अभी कोई इलाज नहीं लिया है।"}]},
+      {"id": "medications", "label": "Current medication", "value": "Blood-pressure medicine reported; name not recalled", "evidence": [{"turn_id": "history-p4", "quote": "ब्लड प्रेशर की दवा लेती हूँ, नाम याद नहीं है।"}]}
+    ],
+    "uncertainties": ["Medication name requires confirmation.", "Examination findings and diagnosis are not established by the voice history."],
+    "turns": [
+      {"id": "history-a1", "role": "agent", "text": "आपको आँख में क्या परेशानी है?", "subtitle": "What difficulty are you having with your eye?"},
+      {"id": "history-p1", "role": "patient", "text": "दाईं आँख से धुंधला दिखता है।", "subtitle": "Seeing is blurred in my right eye."},
+      {"id": "history-a2", "role": "agent", "text": "यह परेशानी कब से है?", "subtitle": "How long has this been happening?"},
+      {"id": "history-p2", "role": "patient", "text": "लगभग छह महीने से है। पढ़ने में दिक्कत होती है।", "subtitle": "About six months. Reading is difficult."},
+      {"id": "history-a3", "role": "agent", "text": "इस परेशानी के लिए कोई इलाज लिया है?", "subtitle": "Have you had any treatment for this complaint?"},
+      {"id": "history-p3", "role": "patient", "text": "इसके लिए अभी कोई इलाज नहीं लिया है।", "subtitle": "I have not had treatment for this complaint yet."},
+      {"id": "history-a4", "role": "agent", "text": "अभी कोई दवा लेते हैं?", "subtitle": "Are you taking any medicine currently?"},
+      {"id": "history-p4", "role": "patient", "text": "ब्लड प्रेशर की दवा लेती हूँ, नाम याद नहीं है।", "subtitle": "I take blood-pressure medicine; I do not remember its name."}
+    ]
+  },
+  "routing": {
+    "steps": [{"id": "vision", "label": "Vision check", "room": "4011"}, {"id": "nct", "label": "NCT", "room": "4013"}, {"id": "consultation", "label": "Clinician consultation", "room": null}],
+    "status": "confirmation_pending",
+    "note": "Staff-configured visit route. Confirm tests and rooms with the clinic before attending.",
+    "source": "Prepared administrative routing; not a clinical test order."
+  },
+  "procedure": {
+    "name": "Cataract surgery", "eye": "Right", "date": "2026-10-27", "source": "Prepared clinician record",
+    "discharge": {"date": "2026-10-27", "scheduled_review_date": "2026-10-31", "source": "Prepared discharge record", "summary": "Right-eye cataract surgery recorded. Scheduled clinician review remains in place."}
+  },
+  "calls": [
+    {
+      "id": "recovery-day-2", "date": "2026-10-29", "label": "First follow-up",
+      "turns": [
+        {"id": "recovery-1-p1", "role": "patient", "text": "हल्का दर्द है, बढ़ा नहीं है। दिखने में कोई बदलाव नहीं है।", "subtitle": "There is mild pain; it has not increased. There is no change in seeing."}
+      ],
+      "extraction": {"observations": [
+        {"id": "pain-1", "symptom": "pain", "change": "same", "description": "Mild pain; not increased", "evidence": [{"turn_id": "recovery-1-p1", "quote": "हल्का दर्द है, बढ़ा नहीं है।"}]},
+        {"id": "vision-1", "symptom": "vision", "change": "same", "description": "No change in seeing", "evidence": [{"turn_id": "recovery-1-p1", "quote": "दिखने में कोई बदलाव नहीं है।"}]}
+      ], "uncertainties": []}
+    },
+    {
+      "id": "recovery-day-3", "date": "2026-10-30", "label": "Second follow-up",
+      "turns": [
+        {"id": "recovery-2-a1", "role": "agent", "text": "कल आपने हल्का दर्द बताया था। आज दर्द कैसा है? और दिखने में कल से कोई बदलाव है?", "subtitle": "Yesterday you reported mild pain. How is the pain today, and has seeing changed since yesterday?"},
+        {"id": "recovery-2-p1", "role": "patient", "text": "कल हल्का दर्द था, आज दर्द बढ़ गया है। दिखने में कल से कोई बदलाव नहीं है।", "subtitle": "Yesterday the pain was mild; today it has increased. There is no change in seeing since yesterday."}
+      ],
+      "extraction": {"observations": [
+        {"id": "pain-2", "symptom": "pain", "change": "worse", "description": "Pain increased since yesterday", "evidence": [{"turn_id": "recovery-2-p1", "quote": "कल हल्का दर्द था, आज दर्द बढ़ गया है।"}]},
+        {"id": "vision-2", "symptom": "vision", "change": "same", "description": "No change in seeing", "evidence": [{"turn_id": "recovery-2-p1", "quote": "दिखने में कल से कोई बदलाव नहीं है।"}]}
+      ], "uncertainties": []}
+    }
+  ]
+}

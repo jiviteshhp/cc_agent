@@ -1,0 +1,18 @@
+{
+  "id":"demo-cataract-001", "synthetic":true,
+  "patient":{"name":"Meera Sharma", "age":64, "label":"Synthetic patient"},
+  "procedure":"Cataract surgery", "operated_eye":"Right", "procedure_date":"2026-10-27", "today":"2026-10-30",
+  "identity_basis":"Explicit synthetic episode selection; telephone number is not verified patient identity. No telephone number is stored.",
+  "intake_review":{"id":"synthetic-intake-review-01", "date":"2026-10-26", "author":"Clinician (synthetic fixture)", "status":"Prepared clinician-review fixture", "summary":"History intake: patient reported right-eye blurring. Draft history reviewed in this illustrative journey; no real clinical findings or approval are asserted.", "patient_report":"दाईं आँख से धुंधला दिखता है।", "source":"Prepared synthetic intake and clinician-review record"},
+  "discharge":{"id":"synthetic-discharge-01", "date":"2026-10-27", "author":"Clinician (synthetic fixture)", "source":"Prepared synthetic clinician-entered discharge record", "summary":"Right-eye cataract surgery recorded for this synthetic episode. Follow-up is scheduled. No examination findings, medication changes or treatment advice are generated here.", "scheduled_review_date":"2026-10-31"},
+  "previous_report":{
+    "id":"report-yesterday", "date":"2026-10-29", "source":"patient_report",
+    "turns":[{"id":"yesterday-patient-1", "role":"patient", "text":"हल्का दर्द है। दिखने में कल से कोई बदलाव नहीं है।", "subtitle":"Mild pain. No change in seeing since the prior day.", "audio":null}],
+    "extraction":{"observations":[
+      {"id":"yesterday-pain", "symptom":"pain", "change":"unknown", "description":"Patient reported mild pain", "evidence":[{"turn_id":"yesterday-patient-1", "quote":"हल्का दर्द है।"}], "corrects":null},
+      {"id":"yesterday-vision", "symptom":"vision", "change":"same", "description":"Patient reported no change in seeing", "evidence":[{"turn_id":"yesterday-patient-1", "quote":"दिखने में कल से कोई बदलाव नहीं है।"}], "corrects":null}
+    ],"uncertainties":[]},
+    "decision":{"status":"baseline", "criterion_ids":[], "issues":[]},
+    "extraction_source":"precomputed_synthetic_fixture"
+  }
+}

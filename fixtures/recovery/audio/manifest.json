@@ -1,0 +1,90 @@
+{
+  "yesterday-patient-1": {
+    "text": "हल्का दर्द है। दिखने में कल से कोई बदलाव नहीं है।",
+    "file": "yesterday-patient-1.wav",
+    "duration": 4.47827664399093,
+    "sha256": "4d4869361a931becfe65966f38436369eb771c1a1bf4cec27b4e87646a91c86c",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "stable-patient-1": {
+    "text": "दर्द कल जैसा ही हल्का है। दिखना भी कल जैसा है, कोई बदलाव नहीं है।",
+    "file": "stable-patient-1.wav",
+    "duration": 6.259319727891157,
+    "sha256": "7b13e61653c53a200f198848ae6ebdb591ff6ba25c7a0e32b32eb8999b0c1a71",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "worsening-patient-1": {
+    "text": "कल हल्का दर्द था, आज दर्द बढ़ गया है। और कल से ज़्यादा धुंधला दिख रहा है।",
+    "file": "worsening-patient-1.wav",
+    "duration": 6.250793650793651,
+    "sha256": "21b87b0a1188d708295e6830e4968994cb3af7449d122c7502d8fcca86dd2158",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "contradictory-patient-1": {
+    "text": "दर्द कल जैसा है। दिखना भी कल जैसा है।",
+    "file": "contradictory-patient-1.wav",
+    "duration": 3.762358276643991,
+    "sha256": "5443e78be9901763874aa41a9d11deac41d0e851ce68741ba170b216c04a3d6d",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "contradictory-patient-2": {
+    "text": "आज दर्द ज़्यादा है।",
+    "file": "contradictory-patient-2.wav",
+    "duration": 1.7045351473922903,
+    "sha256": "46c13e809a00e4dc164fbc6d14020e4bf2fea729a1f28cfe41207740b222e156",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "correction-patient-1": {
+    "text": "दर्द कल जैसा है। दिखना भी कल जैसा है।",
+    "file": "correction-patient-1.wav",
+    "duration": 3.762358276643991,
+    "sha256": "5443e78be9901763874aa41a9d11deac41d0e851ce68741ba170b216c04a3d6d",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "correction-patient-2": {
+    "text": "नहीं, दर्द के बारे में सुधार करूँगी। आज दर्द कल से ज़्यादा है।",
+    "file": "correction-patient-2.wav",
+    "duration": 5.50421768707483,
+    "sha256": "560a31f3319a7ed732173b35d4daf3bf61b92f84503879805c3b6844a351d815",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "question-recovery-change": {
+    "text": "कल आपने हल्का दर्द बताया था। आज दर्द कैसा है? और दिखने में कल से कोई बदलाव है?",
+    "file": "question-recovery-change.wav",
+    "duration": 7.180816326530612,
+    "sha256": "78ec2ebfa32a6524f11b90351574191f97e3b639011eefb7ce085a536b221543",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "message-review_requested": {
+    "text": "आपकी बात में बदलाव या अधूरी जानकारी है। मैं सामान्य सवाल रोककर यह रिपोर्ट टीम की समीक्षा के लिए रख रही हूँ। अभी किसी सदस्य से बात या देखभाल की पुष्टि नहीं हुई है।",
+    "file": "message-review_requested.wav",
+    "duration": 13.643174603174604,
+    "sha256": "255b321f5e1c5cfc24d080a7584aa555f81bdd678b3cee3ecb43931b5e705008",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "message-report_saved": {
+    "text": "आज की आपकी बात दर्ज हो गई है। यह डॉक्टर की जाँच या ठीक होने की पुष्टि नहीं है। तय समीक्षा बनी रहेगी।",
+    "file": "message-report_saved.wav",
+    "duration": 9.06952380952381,
+    "sha256": "8b2e8ff79c1d6cfac54c62450e9a3a560e7eaf64fb65ad02b33ba60e140942b4",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  },
+  "message-transfer_failed": {
+    "text": "टीम से फ़ोन पर संपर्क नहीं हो पाया है। समीक्षा का अनुरोध अभी लंबित है।",
+    "file": "message-transfer_failed.wav",
+    "duration": 6.437097505668934,
+    "sha256": "c2762b84e1b56d4afb64523bd81374815a72490af2fb04d6b81d1a75be5ffef3",
+    "generator": "eSpeak NG Hindi",
+    "provenance": "Generated from checked-in synthetic text; not patient audio or a call recording."
+  }
+}

@@ -6,16 +6,22 @@ CC Agent is an early-stage Hindi/Hinglish voice assistant for structured OPD his
 
 This is the clean development baseline selected from the newer July application archive. Historical recordings, sessions, PDFs, logs, screenshots, virtual environments, binaries, and credentials are intentionally excluded.
 
-The current code is a local-only prototype, without founder login or a call on/off
-switch. Clinical consent, review, and broader privacy controls remain incomplete.
+Local development remains available without founder login or a call on/off switch.
+For an AWS browser demo with HTTPS, a shared password and persistent PDFs, follow
+[the AWS setup guide](docs/AWS_SETUP.md). Clinical consent, review, and broader
+privacy controls remain incomplete.
 
 **Use synthetic data only until the production-readiness gates in `MVP_EXECUTION_PLAN.md` are complete and the applicable hospital approvals exist.**
 
 ## Current MVP
 
+- Doctor portal at `/`: live telephone transcript/draft extraction, source-linked
+  printable reports and prepared aftercare review. See the [launch and recording
+  guide](docs/DOCTOR_PORTAL.md). AWS rollout of this portal is deferred.
 - FastAPI webhook and bidirectional WebSocket for Vobiz calls
 - Sarvam streaming speech-to-text and text-to-speech
-- One configurable Gemini model for conversation and post-call extraction
+- Configurable Gemini text model for cascaded conversation and post-call extraction
+- Optional Gemini Live native speech-to-speech engine in the browser and phone service
 - Post-call structured extraction and PDF generation
 - Development call dashboard and voice playground
 - Separate local website and tunnel-facing phone endpoints
@@ -56,6 +62,16 @@ local-only. No tunnel is needed for browser testing.
 Open **http://localhost:8001/playground** in Chrome or Edge. The application stays
 on this machine; speech/text requests use Sarvam and Google cloud APIs.
 
+Use **Voice engine** to select **Cascaded · Sarvam + Gemini** (the existing path)
+or **Speech-to-speech · Gemini Live**. Both keep the same name/age → Hindi intake
+→ summary/PDF workflow. Native speech needs only `GEMINI_API_KEY` with Live model
+access; its defaults are `GEMINI_LIVE_MODEL=gemini-3.8-live` and
+`GEMINI_LIVE_VOICE=Kore`. No additional package or key is needed.
+**Conversation prompt** edits the selected engine's separate prompt; saving
+retains both. Sarvam voice/pace/expressiveness/ASR/word-gate controls apply only
+to Cascaded. Text mode still uses the cascaded prompt and text model.
+See [Gemini Live setup, prompt rationale and checks](docs/GEMINI_LIVE.md).
+
 1. Add `SARVAM_API_KEY` and `GEMINI_API_KEY` to the existing `.env` file. The setup
    banner lists missing keys without displaying values. Click **Check again**
    after adding missing keys. Restart the server to change an existing key/model.
@@ -71,8 +87,12 @@ on this machine; speech/text requests use Sarvam and Google cloud APIs.
 
 Browser pipeline: filtered AudioWorklet capture → 16 kHz Saaras v4 realtime →
 Gemini 3.6 Flash with minimal thinking → Bulbul v3 streamed as raw 24 kHz PCM.
-The browser has a short playback buffer and requests echo cancellation/noise
-suppression. Interruption cancels model/TTS work and clears scheduled audio.
+The browser has a 120 ms playback buffer and requests echo cancellation/noise
+suppression with automatic microphone gain disabled. An 85 Hz high-pass filter
+reduces rumble. Browser recognition uses balanced partials and a stricter speech
+threshold (0.6; minimum duration 300 ms), independently of phone settings.
+Recognized speech interrupts model/TTS work and clears scheduled
+audio; speech detection without recognized words no longer cancels a reply.
 The same Gemini model extracts the summary after the conversation, with low
 thinking. Named browser calls save a local register entry and a PDF on successful
 completion. Browser audio and full transcripts are not saved automatically.
@@ -85,13 +105,17 @@ latency need a live test. See [the browser implementation and checks](docs/WEB_D
 
 Everything runs on your laptop, but Vobiz needs a public HTTPS/WSS endpoint.
 `main:phone_app` exposes only the answer webhook and audio socket; it cannot serve
-the website, recordings, or prompt editor. No deployment or database is needed.
+the website, recordings, or prompt editor. No deployment or separate database
+service is needed; the saved-call register uses local SQLite.
 
 1. In `.env`, set `SARVAM_API_KEY`, `GEMINI_API_KEY`, and a random
    `VOBIZ_WEBHOOK_SECRET` of at least 32 characters. Generate that secret locally
    with `python -c 'import secrets; print(secrets.token_urlsafe(32))'` and copy it
    into `.env`. Do not share it in chat or commit it. It protects the public
    callback, not a founder login.
+   Set `PHONE_VOICE_ENGINE=s2s` for native Gemini Live, or leave `cascaded` for
+   the existing engine. Native phone speech needs Gemini model access; Sarvam is
+   used only by the cascaded engine. The website selector controls browser calls.
 2. Start the tunnel in a separate terminal and leave it running:
 
    ```bash
@@ -118,8 +142,23 @@ the website, recordings, or prompt editor. No deployment or database is needed.
    The response provides the `/stream` URL; don't configure it as the Answer URL.
 5. Keep ngrok and the phone app running, then call your Vobiz number. Interrupt
    the greeting, give a short Hindi/Hinglish answer, and try a mid-sentence
-   interruption. After hang-up, review the new mono recording at local `/calls`.
-   Run the website command above in a third terminal to view it.
+   interruption. After hang-up, open the local website's **Saved calls**, click
+   **Refresh list**, then **Transcript & audio**. The same caller gets labels
+   `+919000000001_1`, `_2`, etc.; each has a separate transcript, summary/PDF and
+   one mono recording mixing caller and assistant. **Download mono audio** saves
+   that single WAV. Partial calls keep their transcript/recording too. Run the
+   website command above in a third terminal to view it.
+
+Phone counters persist in `state/browser_calls.sqlite3` and start with new calls
+after this update. Old phone history remains at `/calls`; it is not renumbered.
+Country codes are preserved (unprefixed ten-digit numbers assume India). Hidden
+or invalid caller IDs use `Unknown caller_1`, `_2`, etc.; these do not identify
+the same person. A phone number is a call label, not proof of patient identity.
+Unknown name/age stay unknown; a previous call's clinical answers are never copied.
+Use the same working directory for both local processes so they share saved files.
+
+See [the Vobiz test checklist](docs/VOBIZ_TESTING.md) for connection checks and
+the distinction between a local phone test and the deployed browser website.
 
 Stopping the phone process or tunnel makes this test backend unavailable; it
 does not cancel the Vobiz number or its rental. API/telephony usage still costs
@@ -202,3 +241,19 @@ Connect the laptop to your Android hotspot, then use the local HTTPS launcher:
 
 For a new laptop, start with [the complete clone-to-Android setup](docs/ANDROID_HOTSPOT.md) for the one-time phone
 certificate installation and the HTTPS link. No public hosting or tunnel is used.
+
+## Synthetic postoperative recovery demo
+
+The local recovery journey is available at `/recovery`; existing history intake
+and PDFs remain at `/playground`. Replay works without credentials and uses only
+labelled synthetic records and an illustrative, unapproved protocol. See
+[launch/reset instructions and the 120-second demo script](docs/RECOVERY_DEMO.md)
+and the [local review description](docs/PR_RECOVERY_DEMO.md).
+
+## Connected care workspace
+
+Open `/` or `/care` for clinician and patient views across history review, surgery
+and scheduled follow-up. Original live intake stays at `/playground`. See
+[care workspace launch and recording guide](docs/CARE_WORKSPACE.md) and
+[local PR description](docs/PR_CARE_WORKSPACE.md). Calls in the supplied synthetic
+journey use local simulation; missed-call messages exist in the local patient inbox.

@@ -1,0 +1,30 @@
+{
+  "patient": {"id":"CARE-001","name":"Meera Sharma","age":64,"label":"Synthetic record","language":"Hindi / Hinglish","identity_basis":"Explicit synthetic episode selection; no phone number is treated as verified identity."},
+  "scenario_clock":"2026-10-30T09:00:00+05:30",
+  "intake": {
+    "id":"intake-care-001","date":"2026-10-26","status":"awaiting_review","source":"Prepared synthetic patient history","extraction_source":"precomputed_synthetic_fixture","pdf_url":"/care/api/intake.pdf",
+    "fields":[
+      {"id":"chief_complaint","label":"Chief complaint","value":"Blurred seeing in the right eye","evidence":[{"turn_id":"intake-p1","quote":"दाईं आँख से धुंधला दिखता है।"}]},
+      {"id":"laterality","label":"Affected eye","value":"Right","evidence":[{"turn_id":"intake-p1","quote":"दाईं आँख से"}]},
+      {"id":"duration","label":"Duration","value":"Six months, as reported","evidence":[{"turn_id":"intake-p2","quote":"लगभग छह महीने से है।"}]},
+      {"id":"additional_details","label":"Patient's concern","value":"Reading has become difficult","evidence":[{"turn_id":"intake-p2","quote":"पढ़ने में दिक्कत होती है।"}]},
+      {"id":"uncertainties","label":"Needs clinician review","value":"Examination findings and diagnosis are not established by this voice history","evidence":[]}
+    ],
+    "turns":[
+      {"id":"intake-a1","role":"assistant","text":"आपको आँख में क्या परेशानी है?","subtitle":"What difficulty are you having with your eye?"},
+      {"id":"intake-p1","role":"patient","text":"दाईं आँख से धुंधला दिखता है।","subtitle":"Seeing is blurred in my right eye."},
+      {"id":"intake-a2","role":"assistant","text":"यह परेशानी कब से है?","subtitle":"How long has this been happening?"},
+      {"id":"intake-p2","role":"patient","text":"लगभग छह महीने से है। पढ़ने में दिक्कत होती है।","subtitle":"About six months. Reading is difficult."}
+    ]
+  },
+  "prepared_procedure": {
+    "name":"Cataract surgery","eye":"Right","date":"2026-10-27",
+    "source":"Prepared synthetic clinician record",
+    "discharge":{"date":"2026-10-27","source":"Prepared synthetic discharge record","scheduled_review_date":"2026-10-31","summary":"Right-eye cataract surgery is recorded in this synthetic episode. Scheduled clinician review remains in place. No treatment advice or examination findings are generated."}
+  },
+  "missed_call_message": {
+    "text":"We could not reach you for your scheduled follow-up. You can request a callback here. Your scheduled care remains unchanged.",
+    "hi":"तय फॉलो-अप के लिए आपसे संपर्क नहीं हो पाया। आप यहाँ दोबारा कॉल का अनुरोध कर सकते हैं। आपकी तय समीक्षा बनी हुई है।",
+    "source":"Non-clinical administrative message; local patient portal only"
+  }
+}

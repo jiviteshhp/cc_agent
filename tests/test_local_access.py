@@ -83,7 +83,7 @@ def test_phone_callback_secret_and_ticket_without_call_toggle(monkeypatch):
             assert (await client.post("/answer")).status_code == 403
             response = await client.post("/answer", params={"key": SECRET}, data={"From": "synthetic-phone"})
             assert response.status_code == 200
-            assert "<Stream" in response.text and "<Hangup" not in response.text
+            assert "<Stream" in response.text and "<Hangup/>" in response.text
             assert "synthetic-phone" not in response.text
             token = response.text.split("?ticket=")[1].split()[0]
             assert call_access.redeem_ticket(token) == "synthetic-phone"
