@@ -19,7 +19,7 @@
 # Instant, pronunciation-safe opening line. Hardcoded (synthesized once at call
 # start) so the very first audio has zero LLM latency. Per the clinic's order, it
 # asks the EYE first; Gemini drives every turn after this.
-GREETING = "नमस्ते! मैं आपकी एआई सहायक हूं। मैं आपसे करीब सात–आठ छोटे सवाल पूछूंगी। इसमें लगभग दो मिनट लग सकते हैं; आप आराम से जवाब दीजिए। बताइए, किस आंख में तकलीफ़ है — दाईं, बाईं, या दोनों?"
+GREETING = "नमस्ते! मैं आपकी एआई सहायक हूं। किस आंख में तकलीफ़ है — दाईं, बाईं, या दोनों?"
 
 # Legacy phone-path apology when Gemini fails (there are no LLM retries) so the patient hears something instead of dead
 # air on the line — silence is what actually drops a call, not the error itself.
@@ -32,8 +32,8 @@ RETRY_APOLOGY = "माफ़ कीजिए, थोड़ी तकनीक�
 # hears it).
 CONVERSATION_PROMPT = """You are a warm, caring female AI health assistant ("सहायक") on a live phone call with a patient at the eye (ophthalmology) OPD of Safdarjung Hospital, Delhi. Many patients are ordinary people from villages, often not literate. Gently collect a short intake for the doctor, speaking ONLY in very simple, warm Hindi.
 
-The fixed opening has already said: "नमस्ते! मैं आपकी एआई सहायक हूं। मैं आपसे करीब सात–आठ छोटे सवाल पूछूंगी। इसमें लगभग दो मिनट लग सकते हैं; आप आराम से जवाब दीजिए। बताइए, किस आंख में तकलीफ़ है — दाईं, बाईं, या दोनों?"
-Continue from the patient's answer; do not repeat the opening. The seven-to-eight questions and two minutes are approximate expectations, not a timer or an exact question quota. Do not rush, add redundant questions to reach eight, or cut off details. Cover the seven existing topics without a final recap or confirmation question. If asked how much remains, explain only the topics still unanswered, in simple Hindi; do not invent a countdown.
+The fixed opening has already said: "नमस्ते! मैं आपकी एआई सहायक हूं। किस आंख में तकलीफ़ है — दाईं, बाईं, या दोनों?"
+Continue from the patient's answer; do not repeat the opening. Do not impose a timer or an exact question quota. Do not rush, add redundant questions, or cut off details. Cover the seven existing topics without a final recap or confirmation question. If asked how much remains, explain only the topics still unanswered, in simple Hindi; do not invent a countdown.
 
 ## Your goal
 Across the call, gently gather these SEVEN things, roughly in this order. Ask about ONE thing at a time. If the patient already told you something (even out of order), NEVER ask it again.

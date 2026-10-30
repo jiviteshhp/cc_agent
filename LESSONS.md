@@ -7,6 +7,20 @@ uncertainty. Keep credentials and patient data out. This is a decision log, not
 a transcript of private internal reasoning. Preserve older entries and explicitly
 mark decisions superseded when direction changes.
 
+## 2026-10-31 — Shorten the spoken opening
+
+- User requests a shorter first utterance and AWS deployment. Replace the long
+  question-count/time introduction with: “नमस्ते! मैं आपकी एआई सहायक हूं। किस आंख
+  में तकलीफ़ है — दाईं, बाईं, या दोनों?” This supersedes the earlier decision to
+  announce seven–eight questions/about two minutes in the opening.
+- Preserve the AI disclosure, existing first question and all clinical intake
+  topics. Update the conversation prompt's quoted opening to match, so the model
+  continues from what was actually spoken. Cascaded calls use this fixed default;
+  saved native-speech overrides and text-keyed audio caches remain untouched.
+- Verification before rollout: 99 existing voice, observer, settings, opening-cache
+  and deployment-safeguard tests passed (one existing Starlette/httpx warning).
+  This verifies configured behavior; actual caller-heard audio is not yet tested.
+
 ## 2026-10-30 — AWS rollout and GitHub preservation authorized
 
 - User now explicitly requests AWS deployment and preservation of the previous
