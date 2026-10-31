@@ -2,13 +2,21 @@
 
 CC Agent helps eye-care teams hear from patients before and after a visit. Patients can speak in Hindi or Hinglish. The care team gets a readable history, the words behind it, and a place to review reported changes.
 
-The goal is simple: give doctors more context without asking patients to navigate another app.
+## Why we built it
+
+During an ophthalmology posting at a central government hospital, a friend studying MBBS saw how much time busy doctors spent taking patient histories. That left less time for the examination and diagnosis that need a doctor's attention.
+
+Patients can also arrive without knowing which tests they need. They may see the doctor, leave for tests such as a vision check or non-contact tonometry (NCT), and return with the results. Clear instructions before the visit could make that journey easier.
+
+We want to give doctors more context before they see a patient, and help patients understand where to go next. Doctors remain responsible for deciding which tests are appropriate.
 
 ## How it works
 
 1. **A patient calls.** The assistant asks about the eye problem and listens to the answers. The doctor's portal shows the conversation and a draft history as the call progresses.
 2. **A doctor reviews the history.** The portal provides a printable report and a visit slip. In the prepared report, selecting a detail shows the patient words used to support it.
 3. **The team reviews recovery.** A prepared cataract case shows two follow-up reports: one without worsening and a later report of increased pain. The portal links the change to the patient's words and lets a staff member acknowledge the review request and record a next step.
+
+The prepared visit slip illustrates a route for a vision check and NCT. Staff must confirm the route; the current agent does not decide, order or communicate doctor-approved tests to a live caller. Supporting that workflow is a goal, subject to clinical review.
 
 The incoming caller and the prepared report are separate records. A phone number does not verify a patient's identity. Acknowledging a review does not mean the clinical issue is resolved.
 

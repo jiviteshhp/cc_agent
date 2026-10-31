@@ -7,6 +7,17 @@ uncertainty. Keep credentials and patient data out. This is a decision log, not
 a transcript of private internal reasoning. Preserve older entries and explicitly
 mark decisions superseded when direction changes.
 
+## 2026-10-31 — Explain the problem behind the product
+
+- User shared a friend's observation during an MBBS ophthalmology posting: busy
+  doctors spend substantial time taking histories, and patients may make extra
+  trips between consultation and tests. Include this as the project's motivation,
+  not as a measured outcome or a claim of hospital endorsement.
+- Describe doctor-approved test guidance as a goal. The current prepared visit
+  slip illustrates vision and NCT routing awaiting staff confirmation; the live
+  agent does not select, order or communicate clinical tests. User subsequently
+  requested a public submission, authorizing publication of this overview.
+
 ## 2026-10-31 — Update Sarvam speech output
 
 - User requested the latest text-to-speech model. Speech recognition remains
