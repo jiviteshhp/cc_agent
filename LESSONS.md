@@ -7,6 +7,16 @@ uncertainty. Keep credentials and patient data out. This is a decision log, not
 a transcript of private internal reasoning. Preserve older entries and explicitly
 mark decisions superseded when direction changes.
 
+## 2026-10-31 — Clear GitHub overview
+
+- User requests a concise, plain-language README explaining the product and a
+  GitHub push. Keep the difference between actual incoming calls and prepared
+  aftercare visible; do not claim clinical approval or external delivery.
+- User also reports reduced performance after the shortened opening release.
+  Its cause and the affected behavior are not yet established; the release also
+  adjusted the conversation prompt to match the opening. Investigate before
+  attributing the change to a provider or implementation detail.
+
 ## 2026-10-31 — Shorten the spoken opening
 
 - User requests a shorter first utterance and AWS deployment. Replace the long
