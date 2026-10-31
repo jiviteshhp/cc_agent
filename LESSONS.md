@@ -19,6 +19,12 @@ mark decisions superseded when direction changes.
   at 8 kHz and 24 kHz. This does not establish latency or caller-heard quality.
 - The legacy REST helper also produced audio with the v4 request format. All
   504 Python tests passed with one existing Starlette/httpx warning.
+- Deployed `5001ef6` to AWS; both services are healthy and load v4 Flash with
+  the Ritu persona. Phone startup prepared all three new filler clips. All 107
+  prior call rows and 321 existing runtime files, the environment and callback
+  were unchanged. Private rollback is at
+  `/home/ubuntu/cc-agent-backups/phone-20261031T072555Z`. No carrier call was
+  placed; actual caller-heard voice quality and latency remain unverified.
 
 ## 2026-10-31 — Clear GitHub overview
 
