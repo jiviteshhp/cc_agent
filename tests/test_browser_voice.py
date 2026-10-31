@@ -273,7 +273,8 @@ def test_raw_pcm_protocol_alignment_and_single_flush(monkeypatch, settings, expe
         assert result == b"\1\2\3\4" and ws.closed
         assert ws.sent[0]["data"]["output_audio_codec"] == "linear16"
         assert ws.sent[0]["data"]["speech_sample_rate"] == 24000
-        assert ws.sent[0]["data"]["temperature"] == expected
+        assert "temperature" not in ws.sent[0]["data"]
+        assert ws.sent[0]["data"]["speaker"] == "ritu_hi_customer"
         assert [msg["type"] for msg in ws.sent] == ["config", "text", "flush"]
     asyncio.run(run())
 

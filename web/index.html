@@ -15,10 +15,10 @@
 <button id="edit-asr" class="prompt-button"><span><strong>ASR context & vocabulary</strong><small>Add or remove recognition hints</small></span><span aria-hidden="true">↗</span></button>
 <button id="edit-extraction" class="prompt-button"><span><strong>Extraction prompt</strong><small>Edit how the intake is summarized</small></span><span aria-hidden="true">↗</span></button>
 </div>
-<div><div id="cascaded-settings"><label for="voice">Voice</label><select id="voice"><option value="priya">Priya</option><option value="ishita">Ishita</option><option value="ritu">Ritu</option></select>
+<div><div id="cascaded-settings"><label for="voice">Voice</label><select id="voice"><option value="ritu">Ritu</option></select>
 <label for="pace">Speaking pace</label><select id="pace"><option value="0.9">Unhurried · 0.9×</option><option value="1" selected>Natural · 1×</option><option value="1.1">Brisk · 1.1×</option></select>
-<label for="expressiveness">Expressiveness</label><select id="expressiveness" aria-describedby="expressiveness-help"><option value="0.2">Steady · 0.2</option><option value="0.4">Controlled · 0.4</option><option value="0.6" selected>Balanced · 0.6</option><option value="0.8">Expressive · 0.8</option><option value="1">Highly expressive · 1.0</option></select>
-<p id="expressiveness-help" class="muted small">Higher values add variation to the voice. Start with 0.6. Applies to the next call.</p>
+<label for="expressiveness" hidden>Expressiveness</label><select hidden id="expressiveness" aria-describedby="expressiveness-help"><option value="0.2">Steady · 0.2</option><option value="0.4">Controlled · 0.4</option><option value="0.6" selected>Balanced · 0.6</option><option value="0.8">Expressive · 0.8</option><option value="1">Highly expressive · 1.0</option></select>
+<p hidden id="expressiveness-help" class="muted small">Higher values add variation to the voice. Start with 0.6. Applies to the next call.</p>
 <label for="barge-in-min-words">Minimum interruption words</label><input id="barge-in-min-words" type="number" min="2" max="8" step="1" value="3" required aria-describedby="barge-in-help">
 <p id="barge-in-help" class="muted small">Start with 3; try 4 in a noisy room. Applies to the next call while the assistant speaks. Short stop commands like “रुकिए” still work. Short answers are accepted while listening.</p>
 </div><p id="s2s-settings" class="muted small" hidden>Gemini generates the voice directly and handles pauses and interruptions. Change its speaking style in the speech-to-speech prompt.</p>

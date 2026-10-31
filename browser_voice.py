@@ -1,4 +1,4 @@
-"""Wideband Bulbul v3 streaming for the local browser; no MP3 subprocess.
+"""Wideband Bulbul v4 Flash streaming for the local browser; no MP3 subprocess.
 
 Text sending and audio receiving run concurrently on one socket per response.
 Cancellation closes both tasks and the upstream connection, including during
@@ -18,8 +18,9 @@ from audio_pipeline import speech_text, prefetch_pcm
 
 INPUT_RATE = 16000
 OUTPUT_RATE = 24000
-TTS_MODEL = "bulbul:v3"
-VOICES = ("priya", "ishita", "ritu")
+TTS_MODEL = "bulbul:v4-flash"
+VOICES = ("ritu",)
+VOICE_IDS = {"ritu": "ritu_hi_customer"}
 
 
 class SpeechSynthesisUnavailable(RuntimeError):
@@ -73,7 +74,7 @@ async def one_text(text):
     yield text
 
 
-async def stream_speech(chunks, speaker="priya", pace=1.0, temperature=0.6, *, sample_rate=OUTPUT_RATE):
+async def stream_speech(chunks, speaker="ritu", pace=1.0, temperature=0.6, *, sample_rate=OUTPUT_RATE):
     stage = ["connect"]
     try:
         async with aclosing(prefetch_pcm(
@@ -91,15 +92,15 @@ async def _stream_speech(chunks, speaker, pace, temperature, stage, sample_rate=
             or type(temperature) not in (int, float) or not 0.01 <= temperature <= 1.0):
         raise ValueError("Unsupported demo voice settings")
     async with connect(
-        "wss://api.sarvam.ai/text-to-speech/ws?model=bulbul:v3&send_completion_event=true",
+        f"wss://api.sarvam.ai/text-to-speech/ws?model={TTS_MODEL}&send_completion_event=true",
         additional_headers={"Api-Subscription-Key": os.environ["SARVAM_API_KEY"]},
         open_timeout=5, close_timeout=1, max_size=2**20, max_queue=8,
     ) as ws:
         stage[0] = "configuration"
         await ws.send(json.dumps({"type": "config", "data": {
-            "language_code": "hi-IN", "speaker": speaker,
+            "language_code": "hi-IN", "speaker": VOICE_IDS[speaker],
             "speech_sample_rate": sample_rate, "output_audio_codec": "linear16",
-            "pace": pace, "temperature": temperature,
+            "pace": pace,
             "min_buffer_size": 30, "max_chunk_length": 120,
         }}))
 

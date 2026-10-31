@@ -15,7 +15,7 @@ from audio_utils import wav_to_pcm, resample, SAMPLE_RATE
 _client = None                  # one reused httpx connection (REST fallback)
 _sarvam = None                  # one reused Sarvam streaming client
 
-_STREAM_MODEL = "bulbul:v3"
+_STREAM_MODEL = "bulbul:v4-flash"
 _STREAM_SPEAKER = "ritu"
 _CHUNK_TIMEOUT = 10.0            # seconds to wait for the next WS message
 _FFMPEG_READ_SIZE = 3200         # ~0.2s of 8kHz 16-bit mono audio per read
@@ -42,12 +42,12 @@ async def synth(text):
     if not text:
         return b""
     body = {
-        "inputs": [text],
-        "target_language_code": "hi-IN",
-        "speaker": _STREAM_SPEAKER,
+        "text": text,
+        "language_code": "hi-IN",
+        "speaker": "ritu_hi_customer",
         "model": _STREAM_MODEL,
         "speech_sample_rate": SAMPLE_RATE,
-        "encoding": "wav",
+        "output_audio_codec": "wav",
     }
     headers = {"api-subscription-key": os.environ["SARVAM_API_KEY"],
                "Content-Type": "application/json"}

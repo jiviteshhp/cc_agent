@@ -7,6 +7,19 @@ uncertainty. Keep credentials and patient data out. This is a decision log, not
 a transcript of private internal reasoning. Preserve older entries and explicitly
 mark decisions superseded when direction changes.
 
+## 2026-10-31 — Update Sarvam speech output
+
+- User requested the latest text-to-speech model. Speech recognition remains
+  `saaras:v4`; switch speech output to `bulbul:v4-flash` with Sarvam's documented
+  `ritu_hi_customer` voice. Version the filler cache so older audio is preserved.
+- The former short Priya and Ishita IDs were rejected in live v4 probes, so the
+  current browser offers verified Ritu only. V4 ignores temperature; hide the
+  expressiveness control rather than implying it changes the voice.
+- Actual provider probes produced PCM through the application streaming path
+  at 8 kHz and 24 kHz. This does not establish latency or caller-heard quality.
+- The legacy REST helper also produced audio with the v4 request format. All
+  504 Python tests passed with one existing Starlette/httpx warning.
+
 ## 2026-10-31 — Clear GitHub overview
 
 - User requests a concise, plain-language README explaining the product and a

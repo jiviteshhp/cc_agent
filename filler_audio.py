@@ -24,7 +24,7 @@ _ready = {}
 
 
 def cache_path(phrase):
-    identity = f"1|bulbul:v3|ritu|{SAMPLE_RATE}|{phrase}"
+    identity = f"1|bulbul:v4-flash|ritu_hi_customer|{SAMPLE_RATE}|{phrase}"
     name = hashlib.sha256(identity.encode('utf-8')).hexdigest() + '.wav'
     return Path(os.getenv('PHONE_FILLER_CACHE_DIR', 'state/phone_fillers')) / name
 

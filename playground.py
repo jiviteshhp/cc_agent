@@ -71,7 +71,7 @@ class BrowserAgent(ConversationAgent):
         self.input_rate = browser_voice.INPUT_RATE
         self.output_rate = browser_voice.OUTPUT_RATE
         self.turn_debounce = max(0.0, float(os.getenv("BROWSER_TURN_DEBOUNCE_MS", "120")) / 1000)
-        self.speaker = "priya"
+        self.speaker = "ritu"
         self.pace = 1.0
         self.temperature = 0.6
         self.mode = "voice"
@@ -585,7 +585,7 @@ async def _on_text(agent, raw):
             prompt = data.get("prompt", agent.system_prompt)
             greeting = data.get("greeting", agent.greeting)
             cascaded = agent.engine == "cascaded"
-            speaker = data.get("speaker", "priya") if cascaded else "priya"
+            speaker = data.get("speaker", "ritu") if cascaded else "ritu"
             pace = float(data.get("pace", 1.0)) if cascaded else 1.0
             temperature = data.get("temperature", 0.6) if cascaded else 0.6
             settings = {"extraction": data.get("extraction", agent.extraction_prompt)}
